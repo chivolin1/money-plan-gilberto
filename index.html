@@ -182,7 +182,7 @@ function exampleState() {
     income: {
       g: {
         enabled: true, supplementalPct: 22, fedRegPct: 5,
-        children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: false,
+        children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: true,
         entries: [
           { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true },
           { id: 'ex_pay', kind: 'paycheck', label: 'Bonus received (example, edit)', date: '2026-10-05', salary: 0, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true }
@@ -216,10 +216,13 @@ function load() {
 }
 function normalize(s) {
   var d = exampleState();
-  var needMig = !(s && s.migr3);
+  var needMig = !(s && s.migr3), needMig4 = !(s && s.migr4);
   var st = fill(d, s);
   if (needMig) migrate3(st, s);
   st.migr3 = true;
+  // v4: the $1,100 salary is TAKE-HOME. Flip the toggle for existing users unless they changed it by hand (salaryNetTouched).
+  if (needMig4 && !st.income.g.salaryNetTouched) st.income.g.salaryNet = true;
+  st.migr4 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
@@ -310,7 +313,14 @@ function gCalc(e) {
   var ss = gross * num(s.ssPct) / 100, med = gross * num(s.medicarePct) / 100, st = gross * num(s.statePct) / 100;
   var other = num(e.otherDed);
   var est = Math.max(0, gross - fedReg - fedBonus - ss - med - st - other);
-  return { gross: gross, salary: salary, bonus: bonus, fedReg: fedReg, depCredit: depCredit, fedBonus: fedBonus, fed: fedReg + fedBonus, ss: ss, med: med, st: st, other: other, est: round2(est), deposit: false };
+  if (g.salaryNet && num(e.salary) > 0) {
+    // salary is entered as take-home: the salary part nets EXACTLY what was typed (no double tax); only the bonus is taxed on top
+    var sNet = num(e.salary), sOth = salary * (num(s.ssPct) + num(s.medicarePct) + num(s.statePct)) / 100;
+    fedReg = Math.max(0, salary - sOth - sNet); // withholding implied by the back-calculation (absorbs cent rounding)
+    var bNet = bonus - fedBonus - bonus * (num(s.ssPct) + num(s.medicarePct) + num(s.statePct)) / 100;
+    est = Math.max(0, sNet + bNet - other);
+  }
+  return { salaryNetIn: (g.salaryNet && num(e.salary) > 0) ? num(e.salary) : 0, gross: gross, salary: salary, bonus: bonus, fedReg: fedReg, depCredit: depCredit, fedBonus: fedBonus, fed: fedReg + fedBonus, ss: ss, med: med, st: st, other: other, est: round2(est), deposit: false };
 }
 function gOccurrences(mk) {
   var out = [];
@@ -475,11 +485,12 @@ function combinedOut(r) {
   var a = gCalc({ kind: 'paycheck', salary: S, bonus: 0, otherDed: 0 }), c = gCalc({ kind: 'paycheck', salary: S, bonus: r.gross, otherDed: 0 });
   var row = function (l, x, y, cls) { var f = function (v) { return (v < 0 ? '−' : '') + money(Math.abs(v)); }; return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + l + '</td><td style="text-align:right">' + f(x) + '</td><td style="text-align:right">' + f(y) + '</td></tr>'; };
   var h = '<table class="bd" id="combined-tbl"><tr style="font-weight:700"><td></td><td style="text-align:right">Salary only</td><td style="text-align:right">Salary + bonus</td></tr>' +
-    row('Salary (gross per paycheck)', c.salary, c.salary) + row('Bonus (gross)', 0, c.bonus) + row('<b>Gross total</b>', a.gross, c.gross) +
+    row(g.salaryNet ? 'Salary (gross, back-calculated from ' + money(S) + ' take-home)' : 'Salary (gross per paycheck)', c.salary, c.salary) + row('Bonus (gross)', 0, c.bonus) + row('<b>Gross total</b>', a.gross, c.gross) +
     row('Federal – regular salary' + (c.depCredit ? ' (after ' + money(c.depCredit) + ' dependent credit)' : (g.w4Step3 ? '' : ' (no W-4 credit applied)')), -a.fedReg, -c.fedReg) +
     row('Federal – bonus (' + pct(num(g.supplementalPct)) + ' supplemental)', 0, -c.fedBonus) +
     row('Social Security (' + pct(num(s.ssPct)) + ' on total)', -a.ss, -c.ss) + row('Medicare (' + pct(num(s.medicarePct)) + ' on total)', -a.med, -c.med) +
     row('Texas state tax', -a.st, -c.st) +
+    (g.salaryNet && S > 0 ? row('Net salary part (what you enter)', a.est, a.est) + row('Net of bonus (after fed ' + pct(num(g.supplementalPct)) + ', SS, Medicare)', 0, c.est - a.est) : '') +
     row('Estimated take-home', a.est, c.est, 'tot') + '</table>';
   h += '<div class="small" style="margin-top:6px">' + (r.gross > 0 ? 'Combined take-home for the paycheck the bonus lands in: <b>' + money(c.est) + '</b> (salary alone: ' + money(a.est) + '). The bonus adds about <b>' + money(c.est - a.est) + '</b> after tax.' : 'Enter sales above to see the combined paycheck.') + '</div>';
   return h;
@@ -1065,7 +1076,7 @@ document.addEventListener('change', function (ev) {
   if (t.hasAttribute('data-bind')) {
     var path = t.getAttribute('data-bind'), type = t.getAttribute('data-type'), v;
     v = type === 'checkbox' ? t.checked : type === 'bool' ? t.value === 'true' : type === 'number' ? (t.value === '' ? 0 : num(t.value)) : t.value;
-    setPath(state, path, v); save();
+    setPath(state, path, v); if (path === 'income.g.salaryNet') state.income.g.salaryNetTouched = true; save();
     if (path === 'settings.notify' && v && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     render();
   }
