@@ -155,6 +155,13 @@ var timeLabel = function (t) { var p = (t || '09:00').split(':').map(Number); va
 var ordinal = function (n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
 /* ---------- default / example data ---------- */
+function bonusDefaults() {
+  return {
+    sales: 0, life: 0, mode: 'all',
+    tiers: [{ from: 30000, rate: 5 }, { from: 40000, rate: 7 }, { from: 50000, rate: 9 }],
+    lifeAdd: 2, lifeOnce: true, maxRate: 9, assumed: true
+  };
+}
 function exampleState() {
   return {
     version: 1,
@@ -171,9 +178,11 @@ function exampleState() {
     paid: {},
     actuals: {},
     notified: {},
+    bonus: bonusDefaults(),
     income: {
       g: {
         enabled: true, supplementalPct: 22, fedRegPct: 5,
+        children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 12,
         entries: [
           { id: 'ex_pay', kind: 'paycheck', label: 'Paycheck (example)', date: '2026-10-03', salary: 1100, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true },
           { id: 'ex_dep', kind: 'deposit', label: 'Take-home deposit on the 1st (example)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 1100, repeat: 'monthly', example: true }
@@ -211,6 +220,8 @@ function normalize(s) {
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
+  if (!st.bonus || typeof st.bonus !== 'object' || !Array.isArray(st.bonus.tiers) || st.bonus.tiers.length !== 3) st.bonus = bonusDefaults();
+  if (st.bonus.mode !== 'marginal') st.bonus.mode = 'all';
   return st;
 }
 
@@ -267,11 +278,17 @@ function gCalc(e) {
   var g = state.income.g, s = state.settings;
   if (e.kind === 'deposit') return { gross: 0, fed: 0, ss: 0, med: 0, st: 0, other: 0, est: round2(num(e.amount)), deposit: true };
   var salary = num(e.salary), bonus = num(e.bonus), gross = salary + bonus;
-  var fedReg = salary * num(g.fedRegPct) / 100, fedBonus = bonus * num(g.supplementalPct) / 100;
+  var depCredit = 0, fedReg = salary * num(g.fedRegPct) / 100;
+  if (g.w4Step3 && salary > 0) {
+    var yearly = Math.max(0, num(g.children)) * Math.max(0, num(g.creditPerChild)), periods = num(g.payPeriods) > 0 ? num(g.payPeriods) : 12;
+    depCredit = Math.min(fedReg, yearly / periods); // never below $0; bonus withholding is NOT reduced
+    fedReg -= depCredit;
+  }
+  var fedBonus = bonus * num(g.supplementalPct) / 100;
   var ss = gross * num(s.ssPct) / 100, med = gross * num(s.medicarePct) / 100, st = gross * num(s.statePct) / 100;
   var other = num(e.otherDed);
   var est = Math.max(0, gross - fedReg - fedBonus - ss - med - st - other);
-  return { gross: gross, salary: salary, bonus: bonus, fedReg: fedReg, fedBonus: fedBonus, fed: fedReg + fedBonus, ss: ss, med: med, st: st, other: other, est: round2(est), deposit: false };
+  return { gross: gross, salary: salary, bonus: bonus, fedReg: fedReg, depCredit: depCredit, fedBonus: fedBonus, fed: fedReg + fedBonus, ss: ss, med: med, st: st, other: other, est: round2(est), deposit: false };
 }
 function gOccurrences(mk) {
   var out = [];
@@ -352,6 +369,126 @@ function summary(mk) {
   var inc = incomeMonth(mk), bills = billsInMonth(mk), total = 0, paid = 0;
   bills.forEach(function (o) { total += o.amount; if (o.paid) paid += o.amount; });
   return { inc: inc, bills: bills, billsTotal: total, paidTotal: paid, unpaid: total - paid, remaining: inc.best - total, remainingEst: inc.est - total };
+}
+
+/* ---------- bonus calculator ---------- */
+function bonusRate(sales, b) {
+  // returns { gross, base, baseRate, addPct, lifeBonus, effRate, tierIdx, tiers }
+  sales = Math.max(0, num(sales));
+  var tiers = b.tiers.map(function (t) { return { from: Math.max(0, num(t.from)), rate: num(t.rate) }; }).sort(function (x, y) { return x.from - y.from; });
+  var idx = -1, i;
+  for (i = 0; i < tiers.length; i++) if (sales >= tiers[i].from) idx = i;
+  var base = 0;
+  if (b.mode === 'marginal') {
+    for (i = 0; i < tiers.length; i++) {
+      var lo = tiers[i].from, hi = i + 1 < tiers.length ? tiers[i + 1].from : Infinity;
+      base += Math.max(0, Math.min(sales, hi) - lo) * tiers[i].rate / 100;
+    }
+  } else if (idx >= 0) base = sales * tiers[idx].rate / 100;
+  var life = Math.max(0, Math.floor(num(b.life)));
+  var addRaw = life >= 1 ? (b.lifeOnce ? num(b.lifeAdd) : num(b.lifeAdd) * life) : 0;
+  var baseRateNow = sales > 0 ? base / sales * 100 : (idx >= 0 ? tiers[idx].rate : 0);
+  var cap = num(b.maxRate) > 0 ? num(b.maxRate) : Infinity;
+  var addPct = Math.max(0, Math.min(addRaw, cap - baseRateNow));
+  if (idx < 0) addPct = 0; // below tier 1: no bonus, so no life add-on either
+  var lifeBonus = sales * addPct / 100;
+  var gross = round2(base + lifeBonus);
+  return {
+    sales: sales, tiers: tiers, tierIdx: idx, life: life, base: round2(base),
+    baseRate: sales > 0 ? base / sales * 100 : (idx >= 0 ? tiers[idx].rate : 0),
+    addPct: addPct, addRaw: addRaw, capped: addPct < addRaw - 1e-9, cap: cap, lifeBonus: round2(lifeBonus), gross: gross,
+    effRate: sales > 0 ? gross / sales * 100 : (idx >= 0 ? tiers[idx].rate : 0) + addPct
+  };
+}
+function bonusCalc() {
+  var b = state.bonus, r = bonusRate(b.sales, b);
+  r.take = gCalc({ kind: 'paycheck', salary: 0, bonus: r.gross, otherDed: 0 });
+  var nx = r.tierIdx + 1 < r.tiers.length ? r.tiers[r.tierIdx + 1] : null;
+  if (nx) {
+    var at = bonusRate(nx.from, b);
+    r.next = { from: nx.from, rate: nx.rate, need: Math.max(0, nx.from - r.sales), gross: at.gross, gain: round2(at.gross - r.gross), take: gCalc({ kind: 'paycheck', salary: 0, bonus: at.gross, otherDed: 0 }).est };
+  }
+  return r;
+}
+function pct(n) { return (Math.round(n * 100) / 100) + '%'; }
+function bonusOut(r) {
+  var b = state.bonus, g = state.income.g, s = state.settings, t = r.take;
+  var tierTxt = r.tierIdx < 0 ? 'Below tier 1 — no bonus under ' + money(r.tiers[0].from) : 'Tier ' + (r.tierIdx + 1) + ' (from ' + money(r.tiers[r.tierIdx].from) + ')';
+  var h = '<div class="alert ok" style="margin-top:14px"><div><div class="small">Estimated gross bonus</div><div style="font-size:2rem;font-weight:800;line-height:1.1">' + money(r.gross) + '</div><div class="small">at an effective rate of <b>' + pct(r.effRate) + '</b> · take-home about <b>' + money(t.est) + '</b></div></div></div>';
+  h += '<table class="bd"><tr><td>Sales (premium sold)</td><td>' + money(r.sales) + '</td></tr>' +
+    '<tr><td>Tier reached</td><td>' + tierTxt + '</td></tr>' +
+    '<tr><td>Base rate' + (b.mode === 'marginal' ? ' (blended)' : '') + '</td><td>' + pct(r.baseRate) + '</td></tr>' +
+    '<tr><td>Life add-on' + (r.life >= 1 ? ' (' + r.life + ' ' + (r.life === 1 ? 'policy' : 'policies') + (b.lifeOnce ? ', applied once' : ', per policy') + ')' : ' (no life policy sold)') + '</td><td>+' + pct(r.addPct) + '</td></tr>' +
+    (r.capped ? '<tr><td>Rate cap (max total rate)</td><td>' + pct(r.cap) + ' · add-on trimmed from +' + pct(r.addRaw) + '</td></tr>' : (isFinite(r.cap) ? '<tr><td>Rate cap (max total rate)</td><td>' + pct(r.cap) + '</td></tr>' : '')) +
+    '<tr><td><b>Effective rate</b></td><td><b>' + pct(r.effRate) + '</b></td></tr>' +
+    '<tr class="tot"><td>Gross bonus</td><td>' + money(r.gross) + '</td></tr></table>';
+  h += '<h3 style="margin-top:16px">Estimated take-home</h3><table class="bd">' +
+    '<tr><td>Gross bonus</td><td>' + money(t.gross) + '</td></tr>' +
+    '<tr><td>Federal supplemental (' + pct(num(g.supplementalPct)) + ')</td><td>−' + money(t.fedBonus) + '</td></tr>' +
+    '<tr><td>Social Security (' + pct(num(s.ssPct)) + ')</td><td>−' + money(t.ss) + '</td></tr>' +
+    '<tr><td>Medicare (' + pct(num(s.medicarePct)) + ')</td><td>−' + money(t.med) + '</td></tr>' +
+    '<tr><td>Texas state tax' + (num(s.statePct) ? ' (' + pct(num(s.statePct)) + ')' : '') + '</td><td>' + (t.st ? '−' + money(t.st) : money(0)) + '</td></tr>' +
+    '<tr class="tot"><td>Estimated net bonus</td><td>' + money(t.est) + '</td></tr></table>';
+  if (r.next) {
+    h += '<div class="alert info" style="margin-top:14px">🎯<div><b>What-if: next tier</b><br>Sell <b>' + money(r.next.need) + '</b> more (to ' + money(r.next.from) + ') to reach the ' + pct(r.next.rate) + ' tier. Your bonus would be about <b>' + money(r.next.gross) + '</b> (' + (r.next.gain >= 0 ? '+' : '−') + money(Math.abs(r.next.gain)) + ' more), roughly ' + money(r.next.take) + ' take-home.</div></div>';
+  } else if (r.tierIdx >= 0) {
+    h += '<div class="alert info" style="margin-top:14px">🏆<div><b>Top tier reached.</b> Every extra dollar sold earns at the ' + pct(r.effRate) + ' effective rate.</div></div>';
+  }
+  if (r.life < 1) { var lt = bonusRate(r.sales, { tiers: b.tiers, mode: b.mode, life: 1, lifeAdd: b.lifeAdd, lifeOnce: true, maxRate: b.maxRate }); h += '<div class="small muted" style="margin-top:8px">Tip: selling 1 life policy ' + (lt.gross > r.gross ? 'would add ' + pct(lt.addPct) + ' to the rate (about ' + money(lt.gross - r.gross) + ' more on these sales).' : 'adds nothing at this level (you are already at the ' + pct(num(b.maxRate)) + ' cap or below tier 1).') + '</div>'; }
+  return h;
+}
+function bnum(label, path, o) {
+  o = o || {};
+  var v = path.split('.').reduce(function (a, k) { return a == null ? a : a[k]; }, state);
+  return '<div><label class="f">' + label + '</label><input type="number" inputmode="' + (o.int ? 'numeric' : 'decimal') + '" step="' + (o.step || '0.01') + '" min="0" data-bonus="' + path + '" value="' + (num(v) === 0 && !o.showZero ? '' : esc(v)) + '" placeholder="' + (o.ph || '0') + '"></div>';
+}
+function vBonusCard() {
+  var b = state.bonus, r = bonusCalc();
+  var h = '<div class="card" id="bonus-card" style="border:2px solid var(--pri)"><div class="row between"><h3>🎯 Bonus calculator</h3><span class="pill warn">estimate</span></div>' +
+    '<p class="small muted" style="margin:4px 0 0">Enter what you sold for the period. Rate depends on your sales tier, +' + pct(num(b.lifeAdd)) + ' if you sold life insurance, never above ' + (num(b.maxRate) > 0 ? pct(num(b.maxRate)) : 'your cap') + ' total.</p>' +
+    '<div class="fields">' + bnum('Sales this period — premium sold ($)', 'bonus.sales', { ph: 'e.g. 25000' }) + bnum('Life policies sold (count)', 'bonus.life', { int: true, step: '1', ph: '0' }) + '</div>' +
+    '<div id="bonus-out">' + bonusOut(r) + '</div>' +
+    '<div class="row" style="margin-top:14px"><button class="pri" data-action="bonus-use"' + (r.gross > 0 ? '' : ' disabled') + '>💵 Use as bonus in a paycheck</button></div>' +
+    '<details style="margin-top:12px"' + (ui.bonusRules ? ' open' : '') + ' data-keep="bonusRules"><summary>⚙️ Bonus rules (tiers &amp; life add-on)' + (b.assumed ? ' <span class="pill ex" style="margin-left:8px">assumption</span>' : '') + '</summary>' +
+    (b.assumed ? '<div class="alert warn" style="margin-top:6px">⚠️<div><b>Assumption to confirm:</b> the tier rate is applied to <b>all</b> sales once you reach a tier (e.g. $45,000 → 7% of $45,000). If your plan pays each rate only on the sales above its threshold, switch to “Marginal” below.</div></div>' : '') +
+    [0, 1, 2].map(function (i) { return '<div class="fields">' + bnum('Tier ' + (i + 1) + ' starts at sales of ($)', 'bonus.tiers.' + i + '.from', { showZero: true, ph: '0' }) + bnum('Tier ' + (i + 1) + ' rate %', 'bonus.tiers.' + i + '.rate', { step: '0.01', showZero: true }) + '</div>'; }).join('') +
+    '<label class="f">How the tier rate is applied</label><select data-bonus-sel="bonus.mode"><option value="all"' + (b.mode === 'all' ? ' selected' : '') + '>All sales at the tier rate reached (default)</option><option value="marginal"' + (b.mode === 'marginal' ? ' selected' : '') + '>Marginal — each rate only on sales above its threshold</option></select>' +
+    '<div class="fields" style="margin-top:6px">' + bnum('Life add-on (percentage points)', 'bonus.lifeAdd', { showZero: true, step: '0.01' }) + bnum('Max total rate % (cap, 0 = no cap)', 'bonus.maxRate', { showZero: true, step: '0.01' }) + '</div>' +
+    '<label class="chk"><input type="checkbox" data-bonus-chk="bonus.lifeOnce"' + (b.lifeOnce ? ' checked' : '') + '> Add once if at least 1 life policy sold <span class="muted small">(uncheck = add per policy)</span></label>' +
+    '<div class="row" style="margin-top:6px"><button class="sm" data-action="bonus-reset">Reset rules to defaults</button></div>' +
+    '<p class="small muted">Taxes use the supplemental % on the Income tab and the Social Security / Medicare / state rates in Settings. Estimate only — not tax advice; your real bonus statement decides.</p></details></div>';
+  return h;
+}
+function vBonus() {
+  return '<h2>Bonus</h2>' + vBonusCard();
+}
+function bonusModal() {
+  var r = bonusCalc();
+  var pays = state.income.g.entries.filter(function (e) { return e.kind !== 'deposit'; });
+  openModal({
+    title: 'Use as bonus in a paycheck', saveLabel: 'Apply', draft: { target: 'new', date: ui.month === thisMonth() ? today() : ui.month + '-01' },
+    sync: function (f, d) { d.target = fv(f, 'target'); d.date = fv(f, 'date') || d.date; },
+    body: function (d) {
+      return '<p class="small muted" style="margin-top:6px">Bonus <b>' + money(r.gross) + '</b> (gross). Take-home is estimated by the paycheck itself.</p>' +
+        '<label class="f">Where to put it</label><select name="target" data-rerender><option value="new"' + (d.target === 'new' ? ' selected' : '') + '>Create a new paycheck entry</option>' +
+        pays.map(function (e) { return '<option value="' + esc(e.id) + '"' + (d.target === e.id ? ' selected' : '') + '>Set the bonus on: ' + esc(e.label || 'Paycheck') + ' (' + dayLabel(e.date) + ')</option>'; }).join('') + '</select>' +
+        (d.target === 'new' ? '<label class="f">Pay date</label><input name="date" type="date" value="' + esc(d.date) + '">' : '<p class="small muted">This replaces the bonus amount on that paycheck.</p>');
+    },
+    onSave: function (d) {
+      var rec, L = state.income.g.entries, msg;
+      if (d.target === 'new') {
+        if (!d.date) return 'Pick a date.';
+        L.push({ id: uid(), kind: 'paycheck', label: 'Bonus (calculator)', date: d.date, salary: 0, bonus: r.gross, otherDed: 0, amount: 0, repeat: 'none', example: false });
+        ui.month = d.date.slice(0, 7); msg = 'Paycheck created with the bonus';
+      } else {
+        rec = L.find(function (e) { return e.id === d.target; });
+        if (!rec) return 'Paycheck not found.';
+        rec.bonus = r.gross; rec.example = false; ui.month = rec.date.slice(0, 7); msg = 'Bonus set on paycheck';
+      }
+      state.income.g.enabled = true;
+      save(); ui.tab = 'income'; ui.inc = 'g'; render(); window.scrollTo(0, 0); toast(msg); return true;
+    }
+  });
 }
 
 /* ---------- calendar (.ics) ---------- */
@@ -443,7 +580,7 @@ function setPath(obj, path, val) {
   for (var i = 0; i < p.length - 1; i++) { o = o[p[i]]; if (o == null) return; }
   o[p[p.length - 1]] = val;
 }
-var TABS = [['dashboard', '📊', 'Dashboard'], ['payments', '🧾', 'Payments'], ['income', '💵', 'Income'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
+var TABS = [['dashboard', '📊', 'Dashboard'], ['payments', '🧾', 'Payments'], ['income', '💵', 'Income'], ['bonus', '🎯', 'Bonus'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
 function renderTabs() {
   $('#tabs').innerHTML = TABS.map(function (t) {
     return '<button data-action="tab" data-tab="' + t[0] + '" class="' + (ui.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"><span class="ico">' + t[1] + '</span><span>' + t[2] + '</span></button>';
@@ -451,7 +588,7 @@ function renderTabs() {
 }
 function render() {
   renderTabs();
-  var fn = { dashboard: vDashboard, payments: vPayments, income: vIncome, reminders: vReminders, settings: vSettings }[ui.tab];
+  var fn = { dashboard: vDashboard, payments: vPayments, income: vIncome, bonus: vBonus, reminders: vReminders, settings: vSettings }[ui.tab];
   $('#view').innerHTML = fn();
   if (icsInfo.url) document.querySelectorAll('[data-ics-link]').forEach(function (a) { a.href = icsInfo.url; });
   document.querySelectorAll('[data-ics-count]').forEach(function (el) { if (icsInfo.at) el.textContent = icsInfo.count + ' events · updated ' + icsInfo.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); });
@@ -569,7 +706,7 @@ function breakdownTable(c, who) {
   var rows = [];
   if (who === 'g') {
     rows.push(['Regular salary', c.salary], ['Bonus (supplemental)', c.bonus], ['Gross', c.gross, 1]);
-    rows.push(['Federal – regular wages', -c.fedReg], ['Federal – bonus (flat rate)', -c.fedBonus]);
+    rows.push(['Federal – regular wages' + (c.depCredit ? ' (after ' + money(c.depCredit) + ' dependent credit)' : ''), -c.fedReg], ['Federal – bonus (flat rate)', -c.fedBonus]);
   } else {
     rows.push(['Gross pay', c.gross, 1]);
     if (c.preTax) rows.push(['Pre-tax deductions', -c.preTax]);
@@ -609,8 +746,12 @@ function vIncome() {
 function vIncomeG() {
   var g = state.income.g, items = gOccurrences(ui.month), tot = 0, est = 0;
   items.forEach(function (i) { tot += i.actual != null ? i.actual : i.est; est += i.est; });
-  var h = '<div class="card"><label class="chk"><input type="checkbox" data-bind="income.g.enabled" data-type="checkbox"' + (g.enabled ? ' checked' : '') + '> Include my income in the budget</label>' +
+  var h = vBonusCard() + '<div class="card"><label class="chk"><input type="checkbox" data-bind="income.g.enabled" data-type="checkbox"' + (g.enabled ? ' checked' : '') + '> Include my income in the budget</label>' +
     '<div class="fields">' + bindField('Bonus / supplemental federal rate %', 'income.g.supplementalPct', { step: '0.1', max: 100 }) + bindField('Federal withholding on regular salary %', 'income.g.fedRegPct', { step: '0.1', max: 100 }) + '</div>' +
+    '<h3 style="margin-top:14px">👨‍👦‍👦 Dependents (W-4)</h3><div class="fields">' + bindField('Qualifying children under 17', 'income.g.children', { step: '1', max: 20 }) + bindField('Credit per child ($ / year)', 'income.g.creditPerChild', { step: '1' }) +
+    '<div><label class="f">Your pay periods per year</label><select data-bind="income.g.payPeriods" data-type="number"><option value="12"' + (num(g.payPeriods) === 12 ? ' selected' : '') + '>Monthly (12)</option><option value="24"' + (num(g.payPeriods) === 24 ? ' selected' : '') + '>Twice a month (24)</option><option value="26"' + (num(g.payPeriods) === 26 ? ' selected' : '') + '>Every 2 weeks (26)</option><option value="52"' + (num(g.payPeriods) === 52 ? ' selected' : '') + '>Weekly (52)</option></select></div></div>' +
+    '<label class="chk"><input type="checkbox" data-bind="income.g.w4Step3" data-type="checkbox"' + (g.w4Step3 ? ' checked' : '') + '> I entered the dependent credit on my W-4 (Step 3)</label>' +
+    '<p class="small muted">' + (g.w4Step3 ? 'Regular-salary federal withholding is reduced by ' + money(num(g.children) * num(g.creditPerChild) / (num(g.payPeriods) || 12)) + ' per paycheck (' + num(g.children) + ' × ' + money(num(g.creditPerChild)) + ' ÷ ' + (num(g.payPeriods) || 12) + '), never below $0. ' : 'Turn this on if your W-4 Step 3 lists your children; it lowers withholding on regular salary. ') + '<b>The flat ' + num(g.supplementalPct) + '% withholding on bonuses is not reduced by dependents.</b> Dependents mostly matter when you file your taxes (Child Tax Credit), and Texas has no state income tax. Estimate only, not tax advice.</p>' +
     '<p class="small muted">Bonuses are “supplemental wages”: employers commonly withhold a flat <b>22%</b> federal. Social Security (' + state.settings.ssPct + '%), Medicare (' + state.settings.medicarePct + '%) and Texas state tax (' + state.settings.statePct + '%) are set in <a href="#" data-action="tab" data-tab="settings">Settings</a>. The regular-salary % is a guess — match it to your pay stub.</p></div>';
   h += '<div class="card"><div class="row between"><h3>' + esc(monthName(ui.month)) + '</h3><b>' + money(tot) + '</b></div><div class="small muted">Estimated ' + money(est) + '</div>' +
     (items.length ? items.map(incomeRow).join('') : '<div class="empty">No paychecks entered for this month.</div>') +
@@ -826,6 +967,8 @@ document.addEventListener('click', function (ev) {
     case 'month': ui.month = addMonths(ui.month, +el.getAttribute('data-d')); render(); break;
     case 'month-now': ui.month = thisMonth(); render(); break;
     case 'inc-tab': ui.inc = el.getAttribute('data-t'); render(); break;
+    case 'bonus-use': bonusModal(); break;
+    case 'bonus-reset': if (confirm('Reset tiers, mode and life add-on to the defaults?')) { var bd = bonusDefaults(); bd.sales = state.bonus.sales; bd.life = state.bonus.life; state.bonus = bd; ui.bonusRules = true; save(); render(); } break;
     case 'add-bill': billModal(null); break;
     case 'edit-bill': billModal(id); break;
     case 'add-entry': entryModal(null); break;
@@ -845,6 +988,12 @@ document.addEventListener('click', function (ev) {
 });
 document.addEventListener('change', function (ev) {
   var t = ev.target;
+  if (t.hasAttribute && (t.hasAttribute('data-bonus-sel') || t.hasAttribute('data-bonus-chk'))) {
+    var bp = t.getAttribute('data-bonus-sel') || t.getAttribute('data-bonus-chk');
+    setPath(state, bp, t.hasAttribute('data-bonus-chk') ? t.checked : t.value); if (bp === 'bonus.mode') state.bonus.assumed = false;
+    ui.bonusRules = true; save(); render(); return;
+  }
+  if (t.hasAttribute && t.hasAttribute('data-bonus')) { ui.bonusRules = !!t.closest('details'); render(); return; }
   if (t.id === 'importFile') { if (t.files[0]) importJson(t.files[0]); t.value = ''; return; }
   if (modalCfg && t.closest('#modal')) { if (t.hasAttribute('data-rerender')) { syncModal(); drawModal(); } return; }
   if (t.hasAttribute('data-month')) { if (/^\d{4}-\d{2}$/.test(t.value)) { ui.month = t.value; render(); } return; }
@@ -861,7 +1010,18 @@ document.addEventListener('change', function (ev) {
     render();
   }
 });
-document.addEventListener('input', function (ev) { if (ev.target.hasAttribute && ev.target.hasAttribute('data-live') && modalCfg) updatePreview(); });
+document.addEventListener('input', function (ev) {
+  var t = ev.target;
+  if (t.hasAttribute && t.hasAttribute('data-bonus')) {
+    var path = t.getAttribute('data-bonus'), v = t.value === '' ? 0 : Math.max(0, num(t.value));
+    if (path === 'bonus.life') v = Math.floor(v);
+    setPath(state, path, v);
+        save(); var o = $('#bonus-out'); if (o) o.innerHTML = bonusOut(bonusCalc());
+    var ub = $('[data-action="bonus-use"]'); if (ub) ub.disabled = !(bonusCalc().gross > 0);
+    return;
+  }
+  if (ev.target.hasAttribute && ev.target.hasAttribute('data-live') && modalCfg) updatePreview();
+});
 document.addEventListener('submit', function (ev) {
   ev.preventDefault();
   if (!modalCfg) return;
@@ -895,7 +1055,7 @@ render();
 refreshIcs();
 setInterval(checkNotifications, 60000);
 setTimeout(checkNotifications, 2000);
-window.__moneyplan = { state: function () { return state; }, buildIcs: buildIcs, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+window.__moneyplan = { state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
 })();
 
 </script>
