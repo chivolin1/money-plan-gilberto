@@ -182,10 +182,10 @@ function exampleState() {
     income: {
       g: {
         enabled: true, supplementalPct: 22, fedRegPct: 5,
-        children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 12,
+        children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: false,
         entries: [
-          { id: 'ex_pay', kind: 'paycheck', label: 'Paycheck (example)', date: '2026-10-03', salary: 1100, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true },
-          { id: 'ex_dep', kind: 'deposit', label: 'Take-home deposit on the 1st (example)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 1100, repeat: 'monthly', example: true }
+          { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true },
+          { id: 'ex_pay', kind: 'paycheck', label: 'Bonus received (example, edit)', date: '2026-10-05', salary: 0, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true }
         ]
       },
       w: {
@@ -216,13 +216,25 @@ function load() {
 }
 function normalize(s) {
   var d = exampleState();
+  var needMig = !(s && s.migr3);
   var st = fill(d, s);
+  if (needMig) migrate3(st, s);
+  st.migr3 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
   if (!st.bonus || typeof st.bonus !== 'object' || !Array.isArray(st.bonus.tiers) || st.bonus.tiers.length !== 3) st.bonus = bonusDefaults();
   if (st.bonus.mode !== 'marginal') st.bonus.mode = 'all';
   return st;
+}
+
+function migrate3(st, orig) {
+  // v3: salary is paid semi-monthly on the 5th & 20th (24/yr); drop the old "$1,100 take-home on the 1st" seed so nothing double counts
+  var g = st.income.g, L, hadPeriods = orig && orig.income && orig.income.g && orig.income.g.payPeriods;
+  g.entries = L = g.entries.filter(function (e) { return !(e.id === 'ex_dep' && e.example); });
+  L.forEach(function (e) { if (e.id === 'ex_pay' && e.example && num(e.salary) === 1100) { e.salary = 0; e.label = 'Bonus received (example, edit)'; e.date = '2026-10-05'; } });
+  if (!L.some(function (e) { return e.repeat === 'semimonthly'; })) L.unshift({ id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true });
+  if (!hadPeriods || num(hadPeriods) === 12) g.payPeriods = 24;
 }
 
 var state = load();
@@ -274,13 +286,23 @@ function fireAt(date, r) { var p = (r.time || '09:00').split(':').map(Number); v
 function remLabel(r) { return (num(r.days) === 0 ? 'On the due date' : num(r.days) + (num(r.days) === 1 ? ' day' : ' days') + ' before') + ' at ' + timeLabel(r.time); }
 
 /* ---------- income calc ---------- */
+function salGross(x) {
+  // salary field may be gross (default) or take-home; convert take-home to gross with the same withholding rules
+  var g = state.income.g, s = state.settings; x = num(x);
+  if (!g.salaryNet || x <= 0) return x;
+  var oth = (num(s.ssPct) + num(s.medicarePct) + num(s.statePct)) / 100, fed = num(g.fedRegPct) / 100, cred = 0;
+  if (g.w4Step3) cred = Math.max(0, num(g.children)) * Math.max(0, num(g.creditPerChild)) / (num(g.payPeriods) > 0 ? num(g.payPeriods) : 24);
+  var gr = (x - cred) / Math.max(0.01, 1 - fed - oth);
+  if (cred > gr * fed) gr = x / Math.max(0.01, 1 - oth);
+  return round2(gr);
+}
 function gCalc(e) {
   var g = state.income.g, s = state.settings;
   if (e.kind === 'deposit') return { gross: 0, fed: 0, ss: 0, med: 0, st: 0, other: 0, est: round2(num(e.amount)), deposit: true };
-  var salary = num(e.salary), bonus = num(e.bonus), gross = salary + bonus;
+  var salary = salGross(e.salary), bonus = num(e.bonus), gross = salary + bonus;
   var depCredit = 0, fedReg = salary * num(g.fedRegPct) / 100;
   if (g.w4Step3 && salary > 0) {
-    var yearly = Math.max(0, num(g.children)) * Math.max(0, num(g.creditPerChild)), periods = num(g.payPeriods) > 0 ? num(g.payPeriods) : 12;
+    var yearly = Math.max(0, num(g.children)) * Math.max(0, num(g.creditPerChild)), periods = num(g.payPeriods) > 0 ? num(g.payPeriods) : 24;
     depCredit = Math.min(fedReg, yearly / periods); // never below $0; bonus withholding is NOT reduced
     fedReg -= depCredit;
   }
@@ -295,13 +317,20 @@ function gOccurrences(mk) {
   if (!state.income.g.enabled) return out;
   state.income.g.entries.forEach(function (e) {
     if (!e.date) return;
-    var date = null, em = e.date.slice(0, 7);
-    if (em === mk) date = e.date;
-    else if (e.repeat === 'monthly' && mk > em) date = monthDate(mk, +e.date.slice(8, 10));
-    if (!date) return;
-    var c = gCalc(e), key = 'g|' + e.id + '|' + date;
-    var actual = c.deposit ? c.est : (state.actuals[key] != null ? state.actuals[key] : null);
-    out.push({ who: 'g', entry: e, date: date, key: key, calc: c, est: c.est, actual: actual, label: e.label || (c.deposit ? 'Deposit' : 'Paycheck') });
+    var dates = [], em = e.date.slice(0, 7);
+    if (e.repeat === 'semimonthly') {
+      if (mk >= em) {
+        var d1 = monthDate(mk, +e.date.slice(8, 10)), d2 = monthDate(mk, num(e.day2) || 20);
+        [d1, d2].forEach(function (d) { if (dates.indexOf(d) < 0 && d >= e.date) dates.push(d); });
+        dates.sort();
+      }
+    } else if (em === mk) dates.push(e.date);
+    else if (e.repeat === 'monthly' && mk > em) dates.push(monthDate(mk, +e.date.slice(8, 10)));
+    dates.forEach(function (date) {
+      var c = gCalc(e), key = 'g|' + e.id + '|' + date;
+      var actual = c.deposit ? c.est : (state.actuals[key] != null ? state.actuals[key] : null);
+      out.push({ who: 'g', entry: e, date: date, key: key, calc: c, est: c.est, actual: actual, label: e.label || (c.deposit ? 'Deposit' : 'Paycheck') });
+    });
   });
   return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
 }
@@ -437,10 +466,37 @@ function bonusOut(r) {
   if (r.life < 1) { var lt = bonusRate(r.sales, { tiers: b.tiers, mode: b.mode, life: 1, lifeAdd: b.lifeAdd, lifeOnce: true, maxRate: b.maxRate }); h += '<div class="small muted" style="margin-top:8px">Tip: selling 1 life policy ' + (lt.gross > r.gross ? 'would add ' + pct(lt.addPct) + ' to the rate (about ' + money(lt.gross - r.gross) + ' more on these sales).' : 'adds nothing at this level (you are already at the ' + pct(num(b.maxRate)) + ' cap or below tier 1).') + '</div>'; }
   return h;
 }
+function salEntry() {
+  var L = state.income.g.entries;
+  return L.find(function (e) { return e.id === 'ex_sal' && e.kind !== 'deposit'; }) || L.find(function (e) { return e.kind !== 'deposit' && e.repeat === 'semimonthly' && num(e.salary) > 0; }) || L.find(function (e) { return e.kind !== 'deposit' && e.repeat !== 'none' && num(e.salary) > 0; }) || null;
+}
+function combinedOut(r) {
+  var g = state.income.g, s = state.settings, se = salEntry(), S = se ? num(se.salary) : 0;
+  var a = gCalc({ kind: 'paycheck', salary: S, bonus: 0, otherDed: 0 }), c = gCalc({ kind: 'paycheck', salary: S, bonus: r.gross, otherDed: 0 });
+  var row = function (l, x, y, cls) { var f = function (v) { return (v < 0 ? '−' : '') + money(Math.abs(v)); }; return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + l + '</td><td style="text-align:right">' + f(x) + '</td><td style="text-align:right">' + f(y) + '</td></tr>'; };
+  var h = '<table class="bd" id="combined-tbl"><tr style="font-weight:700"><td></td><td style="text-align:right">Salary only</td><td style="text-align:right">Salary + bonus</td></tr>' +
+    row('Salary (gross per paycheck)', c.salary, c.salary) + row('Bonus (gross)', 0, c.bonus) + row('<b>Gross total</b>', a.gross, c.gross) +
+    row('Federal – regular salary' + (c.depCredit ? ' (after ' + money(c.depCredit) + ' dependent credit)' : (g.w4Step3 ? '' : ' (no W-4 credit applied)')), -a.fedReg, -c.fedReg) +
+    row('Federal – bonus (' + pct(num(g.supplementalPct)) + ' supplemental)', 0, -c.fedBonus) +
+    row('Social Security (' + pct(num(s.ssPct)) + ' on total)', -a.ss, -c.ss) + row('Medicare (' + pct(num(s.medicarePct)) + ' on total)', -a.med, -c.med) +
+    row('Texas state tax', -a.st, -c.st) +
+    row('Estimated take-home', a.est, c.est, 'tot') + '</table>';
+  h += '<div class="small" style="margin-top:6px">' + (r.gross > 0 ? 'Combined take-home for the paycheck the bonus lands in: <b>' + money(c.est) + '</b> (salary alone: ' + money(a.est) + '). The bonus adds about <b>' + money(c.est - a.est) + '</b> after tax.' : 'Enter sales above to see the combined paycheck.') + '</div>';
+  return h;
+}
 function bnum(label, path, o) {
   o = o || {};
   var v = path.split('.').reduce(function (a, k) { return a == null ? a : a[k]; }, state);
   return '<div><label class="f">' + label + '</label><input type="number" inputmode="' + (o.int ? 'numeric' : 'decimal') + '" step="' + (o.step || '0.01') + '" min="0" data-bonus="' + path + '" value="' + (num(v) === 0 && !o.showZero ? '' : esc(v)) + '" placeholder="' + (o.ph || '0') + '"></div>';
+}
+function vCombinedCard(r) {
+  var g = state.income.g, se = salEntry();
+  return '<h3 style="margin-top:18px" id="combined-h">Combined paycheck with salary</h3>' +
+    '<p class="small muted" style="margin:4px 0 0">Your salary is paid on the ' + (se && se.repeat === 'semimonthly' ? ordinal(+se.date.slice(8, 10)) + ' and ' + ordinal(num(se.day2) || 20) : 'schedule you set') + ' of each month (' + num(g.payPeriods) + ' pay periods a year). The bonus is added on top of the salary of whichever paycheck it lands in. <span class="pill ex">editable example</span></p>' +
+    '<div class="fields"><div><label class="f">' + (g.salaryNet ? 'Salary per paycheck — take-home ($)' : 'Salary per paycheck — gross ($)') + '</label><input type="number" inputmode="decimal" step="0.01" min="0" data-salary value="' + esc(se ? se.salary : '') + '" placeholder="1100"></div>' +
+    '<div><label class="f">This salary amount is</label><select data-bind="income.g.salaryNet" data-type="bool"><option value="false"' + (g.salaryNet ? '' : ' selected') + '>Gross (before taxes)</option><option value="true"' + (g.salaryNet ? ' selected' : '') + '>Take-home (after taxes)</option></select></div></div>' +
+    '<div id="combined-out">' + combinedOut(r) + '</div>' +
+    (se ? '<div class="small muted" style="margin-top:6px">Paydays and date are editable: <a href="#" data-action="edit-entry" data-id="' + esc(se.id) + '">edit salary paycheck ✏️</a></div>' : '');
 }
 function vBonusCard() {
   var b = state.bonus, r = bonusCalc();
@@ -448,6 +504,7 @@ function vBonusCard() {
     '<p class="small muted" style="margin:4px 0 0">Enter what you sold for the period. Rate depends on your sales tier, +' + pct(num(b.lifeAdd)) + ' if you sold life insurance, never above ' + (num(b.maxRate) > 0 ? pct(num(b.maxRate)) : 'your cap') + ' total.</p>' +
     '<div class="fields">' + bnum('Sales this period — premium sold ($)', 'bonus.sales', { ph: 'e.g. 25000' }) + bnum('Life policies sold (count)', 'bonus.life', { int: true, step: '1', ph: '0' }) + '</div>' +
     '<div id="bonus-out">' + bonusOut(r) + '</div>' +
+    vCombinedCard(r) +
     '<div class="row" style="margin-top:14px"><button class="pri" data-action="bonus-use"' + (r.gross > 0 ? '' : ' disabled') + '>💵 Use as bonus in a paycheck</button></div>' +
     '<details style="margin-top:12px"' + (ui.bonusRules ? ' open' : '') + ' data-keep="bonusRules"><summary>⚙️ Bonus rules (tiers &amp; life add-on)' + (b.assumed ? ' <span class="pill ex" style="margin-left:8px">assumption</span>' : '') + '</summary>' +
     (b.assumed ? '<div class="alert warn" style="margin-top:6px">⚠️<div><b>Assumption to confirm:</b> the tier rate is applied to <b>all</b> sales once you reach a tier (e.g. $45,000 → 7% of $45,000). If your plan pays each rate only on the sales above its threshold, switch to “Marginal” below.</div></div>' : '') +
@@ -751,14 +808,14 @@ function vIncomeG() {
     '<h3 style="margin-top:14px">👨‍👦‍👦 Dependents (W-4)</h3><div class="fields">' + bindField('Qualifying children under 17', 'income.g.children', { step: '1', max: 20 }) + bindField('Credit per child ($ / year)', 'income.g.creditPerChild', { step: '1' }) +
     '<div><label class="f">Your pay periods per year</label><select data-bind="income.g.payPeriods" data-type="number"><option value="12"' + (num(g.payPeriods) === 12 ? ' selected' : '') + '>Monthly (12)</option><option value="24"' + (num(g.payPeriods) === 24 ? ' selected' : '') + '>Twice a month (24)</option><option value="26"' + (num(g.payPeriods) === 26 ? ' selected' : '') + '>Every 2 weeks (26)</option><option value="52"' + (num(g.payPeriods) === 52 ? ' selected' : '') + '>Weekly (52)</option></select></div></div>' +
     '<label class="chk"><input type="checkbox" data-bind="income.g.w4Step3" data-type="checkbox"' + (g.w4Step3 ? ' checked' : '') + '> I entered the dependent credit on my W-4 (Step 3)</label>' +
-    '<p class="small muted">' + (g.w4Step3 ? 'Regular-salary federal withholding is reduced by ' + money(num(g.children) * num(g.creditPerChild) / (num(g.payPeriods) || 12)) + ' per paycheck (' + num(g.children) + ' × ' + money(num(g.creditPerChild)) + ' ÷ ' + (num(g.payPeriods) || 12) + '), never below $0. ' : 'Turn this on if your W-4 Step 3 lists your children; it lowers withholding on regular salary. ') + '<b>The flat ' + num(g.supplementalPct) + '% withholding on bonuses is not reduced by dependents.</b> Dependents mostly matter when you file your taxes (Child Tax Credit), and Texas has no state income tax. Estimate only, not tax advice.</p>' +
+    '<p class="small muted">' + (g.w4Step3 ? 'Regular-salary federal withholding is reduced by ' + money(num(g.children) * num(g.creditPerChild) / (num(g.payPeriods) || 24)) + ' per paycheck (' + num(g.children) + ' × ' + money(num(g.creditPerChild)) + ' ÷ ' + (num(g.payPeriods) || 24) + '), never below $0. ' : 'Turn this on if your W-4 Step 3 lists your children; it lowers withholding on regular salary. ') + '<b>The flat ' + num(g.supplementalPct) + '% withholding on bonuses is not reduced by dependents.</b> Dependents mostly matter when you file your taxes (Child Tax Credit), and Texas has no state income tax. Estimate only, not tax advice.</p>' +
     '<p class="small muted">Bonuses are “supplemental wages”: employers commonly withhold a flat <b>22%</b> federal. Social Security (' + state.settings.ssPct + '%), Medicare (' + state.settings.medicarePct + '%) and Texas state tax (' + state.settings.statePct + '%) are set in <a href="#" data-action="tab" data-tab="settings">Settings</a>. The regular-salary % is a guess — match it to your pay stub.</p></div>';
   h += '<div class="card"><div class="row between"><h3>' + esc(monthName(ui.month)) + '</h3><b>' + money(tot) + '</b></div><div class="small muted">Estimated ' + money(est) + '</div>' +
     (items.length ? items.map(incomeRow).join('') : '<div class="empty">No paychecks entered for this month.</div>') +
     '<div class="row" style="margin-top:12px"><button class="pri" data-action="add-entry">＋ Add paycheck / deposit</button></div></div>';
   h += '<div class="card"><h3>All entries</h3>' + (g.entries.length ? g.entries.map(function (e) {
     var c = gCalc(e);
-    return '<div class="item click" data-action="edit-entry" data-id="' + esc(e.id) + '"><div class="main"><div class="t">' + esc(e.label || 'Entry') + exPill(e) + '</div><div class="s">' + dayLabel(e.date) + ' · ' + (e.kind === 'deposit' ? 'take-home deposit' : 'paycheck, gross ' + money(c.gross)) + (e.repeat === 'monthly' ? ' · repeats monthly' : '') + '</div></div><div class="amt">' + money(c.est) + '</div><span class="muted">✏️</span></div>';
+    return '<div class="item click" data-action="edit-entry" data-id="' + esc(e.id) + '"><div class="main"><div class="t">' + esc(e.label || 'Entry') + exPill(e) + '</div><div class="s">' + dayLabel(e.date) + ' · ' + (e.kind === 'deposit' ? 'take-home deposit' : 'paycheck, gross ' + money(c.gross)) + (e.repeat === 'monthly' ? ' · repeats monthly' : e.repeat === 'semimonthly' ? ' · repeats on the ' + ordinal(+e.date.slice(8, 10)) + ' & ' + ordinal(num(e.day2) || 20) : '') + '</div></div><div class="amt">' + money(c.est) + '</div><span class="muted">✏️</span></div>';
   }).join('') : '<div class="empty">No entries yet.</div>') + '</div>';
   return h;
 }
@@ -890,23 +947,25 @@ function billModal(id) {
 }
 function entryModal(id) {
   var ex = id ? state.income.g.entries.find(function (e) { return e.id === id; }) : null;
-  var d = ex ? clone(ex) : { id: null, kind: 'paycheck', label: '', date: ui.month === thisMonth() ? today() : ui.month + '-01', salary: '', bonus: '', otherDed: '', amount: '', repeat: 'none' };
+  var d = ex ? clone(ex) : { id: null, kind: 'paycheck', label: '', date: ui.month === thisMonth() ? today() : ui.month + '-01', salary: '', bonus: '', otherDed: '', amount: '', repeat: 'none', day2: '' };
   openModal({
     title: ex ? 'Edit paycheck / deposit' : 'Add paycheck / deposit', draft: d, focus: !ex,
-    sync: function (f, d) { ['kind', 'label', 'date', 'salary', 'bonus', 'otherDed', 'amount'].forEach(function (k) { d[k] = fv(f, k); }); d.repeat = fv(f, 'repeat') ? 'monthly' : 'none'; },
+    sync: function (f, d) { ['kind', 'label', 'date', 'salary', 'bonus', 'otherDed', 'amount'].forEach(function (k) { d[k] = fv(f, k); }); d.repeat = fv(f, 'repeat') || 'none'; d.day2 = fv(f, 'day2'); },
     body: function (d) {
       return '<label class="f">Type</label><select name="kind" data-rerender><option value="paycheck"' + (d.kind === 'paycheck' ? ' selected' : '') + '>Paycheck — estimate take-home from gross</option><option value="deposit"' + (d.kind === 'deposit' ? ' selected' : '') + '>Deposit — I already know the take-home amount</option></select>' +
         '<label class="f">Label</label><input name="label" placeholder="e.g. Paycheck" value="' + esc(d.label) + '"><label class="f">Date</label><input name="date" type="date" value="' + esc(d.date) + '">' +
         (d.kind === 'deposit' ? '<label class="f">Take-home amount ($)</label><input name="amount" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(d.amount) + '">' :
-          '<div class="fields"><div><label class="f">Regular salary ($, gross)</label><input name="salary" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.salary) + '"></div><div><label class="f">Bonus ($, gross)</label><input name="bonus" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.bonus) + '"></div></div>' +
+          '<div class="fields"><div><label class="f">Regular salary ($, ' + (state.income.g.salaryNet ? 'take-home' : 'gross') + ')</label><input name="salary" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.salary) + '"></div><div><label class="f">Bonus ($, gross)</label><input name="bonus" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.bonus) + '"></div></div>' +
           '<label class="f">Other deductions ($ — insurance, 401k, etc.)</label><input name="otherDed" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.otherDed) + '"><div class="card" style="margin:12px 0 0" id="prev"></div>') +
-        '<label class="chk"><input type="checkbox" name="repeat"' + (d.repeat === 'monthly' ? ' checked' : '') + '> Repeat every month (same day)</label>';
+        '<label class="f">Repeat</label><select name="repeat" data-rerender><option value="none"' + (d.repeat === 'none' ? ' selected' : '') + '>Does not repeat</option><option value="monthly"' + (d.repeat === 'monthly' ? ' selected' : '') + '>Every month (same day)</option><option value="semimonthly"' + (d.repeat === 'semimonthly' ? ' selected' : '') + '>Twice a month (the date above + a second day)</option></select>' +
+        (d.repeat === 'semimonthly' ? '<label class="f">Second payday (day of month)</label><input name="day2" type="number" inputmode="numeric" step="1" min="1" max="31" value="' + esc(d.day2 || 20) + '"><p class="small muted">Example: date = the 5th, second day = 20 → paid on the 5th and the 20th every month.</p>' : '');
     },
     after: function (d) { updatePreview(); },
     onSave: function (d) {
       if (d.kind === 'deposit' && (d.amount === '' || num(d.amount) < 0)) return 'Enter the deposit amount.';
       if (!d.date) return 'Pick a date.';
       var rec = { id: d.id || uid(), kind: d.kind, label: String(d.label).trim(), date: d.date, salary: num(d.salary), bonus: num(d.bonus), otherDed: num(d.otherDed), amount: num(d.amount), repeat: d.repeat, example: false };
+      if (d.repeat === 'semimonthly') { rec.day2 = Math.min(31, Math.max(1, Math.round(num(d.day2) || 20))); }
       var L = state.income.g.entries;
       if (d.id) { L[L.findIndex(function (e) { return e.id === d.id; })] = rec; } else L.push(rec);
       save(); render(); toast('Saved'); return true;
@@ -993,6 +1052,7 @@ document.addEventListener('change', function (ev) {
     setPath(state, bp, t.hasAttribute('data-bonus-chk') ? t.checked : t.value); if (bp === 'bonus.mode') state.bonus.assumed = false;
     ui.bonusRules = true; save(); render(); return;
   }
+  if (t.hasAttribute && t.hasAttribute('data-salary')) { render(); return; }
   if (t.hasAttribute && t.hasAttribute('data-bonus')) { ui.bonusRules = !!t.closest('details'); render(); return; }
   if (t.id === 'importFile') { if (t.files[0]) importJson(t.files[0]); t.value = ''; return; }
   if (modalCfg && t.closest('#modal')) { if (t.hasAttribute('data-rerender')) { syncModal(); drawModal(); } return; }
@@ -1004,7 +1064,7 @@ document.addEventListener('change', function (ev) {
   }
   if (t.hasAttribute('data-bind')) {
     var path = t.getAttribute('data-bind'), type = t.getAttribute('data-type'), v;
-    v = type === 'checkbox' ? t.checked : type === 'number' ? (t.value === '' ? 0 : num(t.value)) : t.value;
+    v = type === 'checkbox' ? t.checked : type === 'bool' ? t.value === 'true' : type === 'number' ? (t.value === '' ? 0 : num(t.value)) : t.value;
     setPath(state, path, v); save();
     if (path === 'settings.notify' && v && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     render();
@@ -1016,8 +1076,15 @@ document.addEventListener('input', function (ev) {
     var path = t.getAttribute('data-bonus'), v = t.value === '' ? 0 : Math.max(0, num(t.value));
     if (path === 'bonus.life') v = Math.floor(v);
     setPath(state, path, v);
-        save(); var o = $('#bonus-out'); if (o) o.innerHTML = bonusOut(bonusCalc());
+        save(); var o = $('#bonus-out'); if (o) o.innerHTML = bonusOut(bonusCalc()); var co2 = $('#combined-out'); if (co2) co2.innerHTML = combinedOut(bonusCalc());
     var ub = $('[data-action="bonus-use"]'); if (ub) ub.disabled = !(bonusCalc().gross > 0);
+    return;
+  }
+  if (t.hasAttribute && t.hasAttribute('data-salary')) {
+    var se = salEntry(), sv = t.value === '' ? 0 : Math.max(0, num(t.value));
+    if (!se) { se = { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck', date: today().slice(0, 7) + '-05', day2: 20, salary: 0, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: false }; state.income.g.entries.unshift(se); }
+    se.salary = sv; se.example = false; state.income.g.enabled = true; save();
+    var co = $('#combined-out'); if (co) co.innerHTML = combinedOut(bonusCalc());
     return;
   }
   if (ev.target.hasAttribute && ev.target.hasAttribute('data-live') && modalCfg) updatePreview();
@@ -1055,7 +1122,7 @@ render();
 refreshIcs();
 setInterval(checkNotifications, 60000);
 setTimeout(checkNotifications, 2000);
-window.__moneyplan = { state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+window.__moneyplan = { combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
 })();
 
 </script>
