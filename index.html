@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>Money Plan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f766e'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle' fill='white' font-family='Arial' font-weight='700'%3E$%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f3f6f6;--card:#fff;--ink:#14212b;--muted:#5b6b78;--line:#dfe6ea;
+  --pri:#0f766e;--pri-ink:#fff;--pri-soft:#d9f1ee;
+  --ok:#15803d;--ok-soft:#dcfce7;--warn:#b45309;--warn-soft:#fef3c7;--bad:#b91c1c;--bad-soft:#fee2e2;
+  --blue:#2563eb;--radius:16px;--shadow:0 1px 2px rgba(15,30,40,.06),0 4px 14px rgba(15,30,40,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0c1418;--card:#142027;--ink:#e8f0f3;--muted:#93a4af;--line:#25353e;--pri:#2dd4bf;--pri-ink:#042f2a;--pri-soft:#12403c;
+  --ok:#4ade80;--ok-soft:#10361f;--warn:#fbbf24;--warn-soft:#3b2d0a;--bad:#f87171;--bad-soft:#401414;--blue:#60a5fa;--shadow:none}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:84px}
+h1,h2,h3{margin:0;line-height:1.2}
+h2{font-size:1.25rem;margin:22px 0 10px}
+h3{font-size:1.05rem}
+.topbar{background:var(--pri);color:var(--pri-ink);padding:12px 16px 10px;position:sticky;top:0;z-index:20;padding-top:max(12px,env(safe-area-inset-top))}
+.brand{display:flex;gap:12px;align-items:center;max-width:980px;margin:0 auto}
+.brand h1{font-size:1.35rem}.brand p{margin:0;font-size:.85rem;opacity:.85}
+.logo{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-weight:800;font-size:1.5rem}
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;z-index:30;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -4px 14px rgba(0,0,0,.08)}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);padding:8px 2px 9px;min-height:62px;font:inherit;font-size:.74rem;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.tabs button .ico{font-size:1.4rem;line-height:1}
+.tabs button.on{color:var(--pri);font-weight:700}
+.tabs button.on .ico{transform:scale(1.1)}
+.view{max-width:980px;margin:0 auto;padding:6px 14px 20px}
+.foot{max-width:980px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:.8rem}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin:12px 0;border:1px solid var(--line)}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.stat{padding:16px}.stat .lbl{color:var(--muted);font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.stat .big{font-size:2rem;font-weight:800;margin:4px 0}.stat .sub{color:var(--muted);font-size:.85rem}
+.pos{color:var(--ok)}.neg{color:var(--bad)}.muted{color:var(--muted)}.small{font-size:.85rem}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}.grow{flex:1}
+.monthbar{display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap}
+.monthbar input[type=month]{flex:1;min-width:150px}
+button,.btn{font:inherit;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+button:active,.btn:active{transform:scale(.98)}
+button.pri,.btn.pri{background:var(--pri);color:var(--pri-ink);border-color:var(--pri)}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button.sm{min-height:44px;padding:0 14px;font-size:.92rem}
+button.ghost{background:none;border-color:transparent;color:var(--pri)}
+input,select,textarea{font:inherit;width:100%;min-height:48px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+input[type=checkbox]{width:26px;height:26px;min-height:0;accent-color:var(--pri);flex:none}
+input[type=radio]{width:22px;height:22px;min-height:0;accent-color:var(--pri)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid color-mix(in srgb,var(--pri) 45%,transparent);outline-offset:1px}
+label.f{display:block;font-size:.85rem;font-weight:600;color:var(--muted);margin:10px 0 4px}
+label.chk{display:flex;align-items:center;gap:12px;min-height:48px;font-weight:600;cursor:pointer}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:2px 12px}
+.pill{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--pri-soft);color:var(--pri);vertical-align:middle}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.ex{background:var(--warn-soft);color:var(--warn)}
+.alert{border-radius:14px;padding:12px 14px;margin:10px 0;border:1px solid;display:flex;gap:10px;align-items:flex-start}
+.alert.bad{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.alert.warn{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.alert.ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.alert.info{background:var(--pri-soft);border-color:var(--pri);color:var(--ink)}
+.alert b{color:inherit}
+.item{display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .main{flex:1;min-width:0}.item .t{font-weight:700;overflow-wrap:anywhere}.item .s{color:var(--muted);font-size:.85rem}
+.item .amt{font-weight:800;white-space:nowrap}
+.item.paid .t,.item.paid .amt{text-decoration:line-through;opacity:.55}
+.item.click{cursor:pointer}
+.datebox{width:52px;text-align:center;background:var(--pri-soft);color:var(--pri);border-radius:12px;padding:4px 0;flex:none}
+.datebox b{display:block;font-size:1.25rem;line-height:1.1}.datebox span{font-size:.7rem;text-transform:uppercase;font-weight:700}
+.datebox.od{background:var(--bad-soft);color:var(--bad)}.datebox.pd{background:var(--ok-soft);color:var(--ok)}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px;margin:10px 0}
+.seg button{flex:1;border:0;background:none;min-height:46px}
+.seg button.on{background:var(--pri);color:var(--pri-ink)}
+.bar{height:12px;border-radius:99px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:var(--pri)}
+.catrow{margin:10px 0}.catrow .row{margin-bottom:4px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+svg.chart{width:100%;height:auto;display:block}
+svg.chart text{fill:var(--muted);font-size:10px;font-family:inherit}
+svg.chart .val{fill:var(--ink);font-weight:700}
+table.bd{width:100%;border-collapse:collapse;font-size:.92rem}
+table.bd td{padding:5px 0;border-bottom:1px dashed var(--line)}table.bd td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+table.bd tr.tot td{font-weight:800;border-bottom:0;border-top:2px solid var(--line);padding-top:8px}
+details summary{cursor:pointer;color:var(--pri);font-weight:600;min-height:40px;display:flex;align-items:center}
+.modal-wrap{position:fixed;inset:0;background:rgba(5,15,20,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.modal-wrap[hidden],.toast[hidden]{display:none}
+.modal{background:var(--card);width:100%;max-width:560px;max-height:94vh;overflow:auto;border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.modal-wrap{align-items:center}.modal{border-radius:22px}}
+.modal .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}.modal .actions .pri{flex:1}
+.err{color:var(--bad);font-weight:600;margin-top:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;background:#111c22;color:#fff;padding:12px 18px;border-radius:12px;z-index:60;max-width:90vw;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.empty{text-align:center;color:var(--muted);padding:22px 8px}
+.remrow{display:flex;gap:8px;align-items:flex-end;margin:6px 0}.remrow>div{flex:1}
+code.k{background:var(--pri-soft);padding:1px 6px;border-radius:6px;font-size:.85em}
+ol.steps{padding-left:22px;margin:6px 0}ol.steps li{margin:6px 0}
+@media(min-width:820px){
+  body{padding-bottom:0}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:10px 24px}
+  .brand{margin:0;max-width:none}
+  .tabs{position:static;background:none;border:0;box-shadow:none;padding:0;width:auto}
+  .tabs button{min-height:52px;flex-direction:row;gap:6px;padding:0 16px;color:var(--pri-ink);opacity:.8;font-size:.95rem;border-radius:12px}
+  .tabs button.on{background:rgba(255,255,255,.2);color:var(--pri-ink);opacity:1}
+  .toast{bottom:30px}
+}
+.alert a,.card a{color:inherit;font-weight:700;text-decoration:underline}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">$</span><div><h1>Money Plan</h1><p id="subtitle">Bills, paychecks &amp; household budget</p></div></div>
+  <nav id="tabs" class="tabs" aria-label="Sections"></nav>
+</header>
+<main id="view" class="view" aria-live="polite"></main>
+<footer class="foot">Tax figures are <strong>estimates only</strong>, not tax advice. Check your pay stub / W-4 or ask a tax professional. Data stays on this device (browser localStorage).</footer>
+<div id="modal" class="modal-wrap" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script>
+/* Money Plan — plain JS, no dependencies. Data lives in localStorage. */
+(function () {
+'use strict';
+
+/* ---------- helpers ---------- */
+var KEY = 'moneyplan.v1';
+var CATS = ['Housing', 'Utilities', 'Insurance', 'Subscriptions', 'Debt / Credit card', 'Transportation', 'Food', 'Medical', 'Other'];
+var CAT_COLORS = ['#0f766e', '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#64748b'];
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var pad = function (n) { return String(n).padStart(2, '0'); };
+var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+var fmtMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+var money = function (n) { n = Number(n) || 0; return (n < 0 ? '-' : '') + fmtMoney.format(Math.abs(n)); };
+var num = function (v) { var n = parseFloat(v); return isFinite(n) ? n : 0; };
+var round2 = function (n) { return Math.round(n * 100) / 100; };
+var uid = function () { return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); };
+var clone = function (o) { return JSON.parse(JSON.stringify(o)); };
+var ymd = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+var parseD = function (s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+var today = function () { return ymd(new Date()); };
+var thisMonth = function () { return today().slice(0, 7); };
+var dim = function (y, m) { return new Date(y, m, 0).getDate(); };
+var addMonths = function (mk, n) { var p = mk.split('-').map(Number); return ymd(new Date(p[0], p[1] - 1 + n, 1)).slice(0, 7); };
+var addDays = function (s, n) { var d = parseD(s); d.setDate(d.getDate() + n); return ymd(d); };
+var diffDays = function (a, b) { return Math.round((parseD(a) - parseD(b)) / 86400000); };
+var monthDate = function (mk, day) { var p = mk.split('-').map(Number); return mk + '-' + pad(Math.min(Math.max(1, day), dim(p[0], p[1]))); };
+var monthName = function (mk) { var p = mk.split('-').map(Number); return new Date(p[0], p[1] - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); };
+var monthShort = function (mk) { var p = mk.split('-').map(Number); return new Date(p[0], p[1] - 1, 1).toLocaleDateString('en-US', { month: 'short' }); };
+var dayLabel = function (s) { return parseD(s).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); };
+var timeLabel = function (t) { var p = (t || '09:00').split(':').map(Number); var h = p[0] % 12 || 12; return h + ':' + pad(p[1] || 0) + ' ' + (p[0] < 12 ? 'AM' : 'PM'); };
+var ordinal = function (n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+/* ---------- default / example data ---------- */
+function exampleState() {
+  return {
+    version: 1,
+    settings: {
+      userName: 'Gilberto',
+      ssPct: 6.2, medicarePct: 1.45, statePct: 0,
+      reminders: [{ days: 3, time: '09:00' }, { days: 1, time: '09:00' }],
+      timedEvents: false, icsMonths: 12, notify: false
+    },
+    bills: [
+      { id: 'ex_renters', name: 'Renters insurance', amount: 24.25, category: 'Insurance', recurrence: 'monthly', dueDay: 27, dueDate: '', startMonth: '2026-10', notes: 'EXAMPLE from your calendar — edit freely.', reminders: null, active: true, example: true },
+      { id: 'ex_flex', name: 'Flex rent', amount: 515, category: 'Housing', recurrence: 'monthly', dueDay: 16, dueDate: '', startMonth: '2026-10', notes: 'EXAMPLE from your calendar — edit freely.', reminders: null, active: true, example: true }
+    ],
+    paid: {},
+    actuals: {},
+    notified: {},
+    income: {
+      g: {
+        enabled: true, supplementalPct: 22, fedRegPct: 5,
+        entries: [
+          { id: 'ex_pay', kind: 'paycheck', label: 'Paycheck (example)', date: '2026-10-03', salary: 1100, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true },
+          { id: 'ex_dep', kind: 'deposit', label: 'Take-home deposit on the 1st (example)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 1100, repeat: 'monthly', example: true }
+        ]
+      },
+      w: {
+        enabled: true, rate: 18, hours: 40, overtime: true, otThreshold: 40, otMult: 1.5,
+        frequency: 'biweekly', anchor: '2026-10-16', semiDay1: 15, semiDay2: 0,
+        preTax: 0, otherDed: 0, fedMode: 'percent', fedPct: 8, filing: 'married', example: true
+      }
+    }
+  };
+}
+
+function fill(base, over) {
+  if (over == null) return base;
+  if (Array.isArray(base) || typeof base !== 'object' || base === null) return over;
+  var out = {}, k;
+  for (k in base) out[k] = (k in over) ? fill(base[k], over[k]) : clone(base[k]);
+  for (k in over) if (!(k in out)) out[k] = over[k];
+  return out;
+}
+
+var memStore = null;
+function load() {
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) return normalize(JSON.parse(raw));
+  } catch (e) { /* ignore */ }
+  return exampleState();
+}
+function normalize(s) {
+  var d = exampleState();
+  var st = fill(d, s);
+  ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
+  if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
+  if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
+  return st;
+}
+
+var state = load();
+var ui = { tab: 'dashboard', month: thisMonth(), inc: 'g' };
+var icsInfo = { url: null, count: 0, at: null };
+var icsTimer = null;
+
+function save(skipIcs) {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { memStore = JSON.stringify(state); }
+  if (!skipIcs) scheduleIcs();
+}
+
+/* ---------- bills ---------- */
+function occurrencesFor(b, mk) {
+  if (b.active === false) return [];
+  var date;
+  if (b.recurrence === 'once') {
+    if (!b.dueDate || b.dueDate.slice(0, 7) !== mk) return [];
+    date = b.dueDate;
+  } else {
+    if (b.startMonth && mk < b.startMonth) return [];
+    if (b.endMonth && mk > b.endMonth) return [];
+    date = monthDate(mk, num(b.dueDay) || 1);
+  }
+  var key = b.id + '|' + mk;
+  return [{ bill: b, date: date, mk: mk, key: key, amount: num(b.amount), paid: state.paid[key] || null }];
+}
+function billsInMonth(mk) {
+  var out = [];
+  state.bills.forEach(function (b) { out = out.concat(occurrencesFor(b, mk)); });
+  return out.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.bill.name.localeCompare(b.bill.name); });
+}
+function overdueList() {
+  var t = today(), out = [], cm = thisMonth();
+  for (var i = -5; i <= 0; i++) {
+    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && o.date < t) out.push(o); });
+  }
+  return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+function upcomingList(days) {
+  var t = today(), end = addDays(t, days), out = [], cm = thisMonth();
+  for (var i = 0; i <= 3; i++) {
+    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && o.date >= t && o.date <= end) out.push(o); });
+  }
+  return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+function billReminders(b) { return (b.reminders && b.reminders.length) ? b.reminders : state.settings.reminders; }
+function fireAt(date, r) { var p = (r.time || '09:00').split(':').map(Number); var d = parseD(addDays(date, -num(r.days))); d.setHours(p[0] || 0, p[1] || 0, 0, 0); return d; }
+function remLabel(r) { return (num(r.days) === 0 ? 'On the due date' : num(r.days) + (num(r.days) === 1 ? ' day' : ' days') + ' before') + ' at ' + timeLabel(r.time); }
+
+/* ---------- income calc ---------- */
+function gCalc(e) {
+  var g = state.income.g, s = state.settings;
+  if (e.kind === 'deposit') return { gross: 0, fed: 0, ss: 0, med: 0, st: 0, other: 0, est: round2(num(e.amount)), deposit: true };
+  var salary = num(e.salary), bonus = num(e.bonus), gross = salary + bonus;
+  var fedReg = salary * num(g.fedRegPct) / 100, fedBonus = bonus * num(g.supplementalPct) / 100;
+  var ss = gross * num(s.ssPct) / 100, med = gross * num(s.medicarePct) / 100, st = gross * num(s.statePct) / 100;
+  var other = num(e.otherDed);
+  var est = Math.max(0, gross - fedReg - fedBonus - ss - med - st - other);
+  return { gross: gross, salary: salary, bonus: bonus, fedReg: fedReg, fedBonus: fedBonus, fed: fedReg + fedBonus, ss: ss, med: med, st: st, other: other, est: round2(est), deposit: false };
+}
+function gOccurrences(mk) {
+  var out = [];
+  if (!state.income.g.enabled) return out;
+  state.income.g.entries.forEach(function (e) {
+    if (!e.date) return;
+    var date = null, em = e.date.slice(0, 7);
+    if (em === mk) date = e.date;
+    else if (e.repeat === 'monthly' && mk > em) date = monthDate(mk, +e.date.slice(8, 10));
+    if (!date) return;
+    var c = gCalc(e), key = 'g|' + e.id + '|' + date;
+    var actual = c.deposit ? c.est : (state.actuals[key] != null ? state.actuals[key] : null);
+    out.push({ who: 'g', entry: e, date: date, key: key, calc: c, est: c.est, actual: actual, label: e.label || (c.deposit ? 'Deposit' : 'Paycheck') });
+  });
+  return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+var BRACKETS = {
+  married: { std: 32200, b: [[24800, 0.10], [100800, 0.12], [211400, 0.22], [403550, 0.24]] },
+  single: { std: 16100, b: [[12400, 0.10], [50400, 0.12], [105700, 0.22], [201775, 0.24]] }
+};
+function fedAnnual(taxable, filing) {
+  var c = BRACKETS[filing] || BRACKETS.married, inc = Math.max(0, taxable - c.std), tax = 0, prev = 0;
+  for (var i = 0; i < c.b.length; i++) {
+    if (inc > prev) { tax += (Math.min(inc, c.b[i][0]) - prev) * c.b[i][1]; prev = c.b[i][0]; }
+  }
+  if (inc > prev) tax += (inc - prev) * 0.32;
+  return tax;
+}
+function wPeriods(w) { return w.frequency === 'weekly' ? 52 : w.frequency === 'biweekly' ? 26 : 24; }
+function wCalc() {
+  var w = state.income.w, s = state.settings;
+  var h = num(w.hours), rate = num(w.rate), thr = num(w.otThreshold) || 40, mult = num(w.otMult) || 1.5;
+  var regH = Math.min(h, thr), otH = Math.max(0, h - thr);
+  var weekly = rate * regH + rate * otH * (w.overtime ? mult : 1);
+  var per = wPeriods(w), gross = weekly * 52 / per;
+  var preTax = num(w.preTax), taxable = Math.max(0, gross - preTax);
+  var fed = w.fedMode === 'simple' ? fedAnnual(taxable * per, w.filing) / per : taxable * num(w.fedPct) / 100;
+  var ss = gross * num(s.ssPct) / 100, med = gross * num(s.medicarePct) / 100, st = gross * num(s.statePct) / 100;
+  var other = num(w.otherDed);
+  var net = Math.max(0, gross - fed - ss - med - st - preTax - other);
+  return { weekly: weekly, regH: regH, otH: otH, per: per, gross: gross, preTax: preTax, fed: fed, ss: ss, med: med, st: st, other: other, net: round2(net), monthlyNet: net * per / 12, monthlyGross: gross * per / 12 };
+}
+function wPaydays(mk) {
+  var w = state.income.w, out = [], p = mk.split('-').map(Number);
+  if (w.frequency === 'semimonthly') {
+    var d1 = num(w.semiDay1) || 15, d2 = num(w.semiDay2);
+    var last = dim(p[0], p[1]);
+    var a = monthDate(mk, d1), b = monthDate(mk, d2 > 0 ? d2 : last);
+    out = a === b ? [a] : [a, b].sort();
+  } else {
+    if (!w.anchor) return [];
+    var step = w.frequency === 'weekly' ? 7 : 14;
+    var first = mk + '-01', lastD = mk + '-' + pad(dim(p[0], p[1]));
+    var off = diffDays(first, w.anchor);
+    var k = Math.ceil(off / step);
+    var d = addDays(w.anchor, k * step);
+    while (d <= lastD) { if (d >= first) out.push(d); d = addDays(d, step); }
+  }
+  return out;
+}
+function wOccurrences(mk) {
+  var w = state.income.w, out = [];
+  if (!w.enabled) return out;
+  var c = wCalc();
+  wPaydays(mk).forEach(function (date) {
+    var key = 'w|' + date;
+    out.push({ who: 'w', date: date, key: key, calc: c, est: c.net, actual: state.actuals[key] != null ? state.actuals[key] : null, label: 'Wife paycheck' });
+  });
+  return out;
+}
+function incomeMonth(mk) {
+  var items = gOccurrences(mk).concat(wOccurrences(mk)).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  var est = 0, best = 0, actual = 0;
+  items.forEach(function (i) { est += i.est; best += (i.actual != null ? i.actual : i.est); if (i.actual != null) actual += i.actual; });
+  return { items: items, est: est, best: best, actual: actual };
+}
+function summary(mk) {
+  var inc = incomeMonth(mk), bills = billsInMonth(mk), total = 0, paid = 0;
+  bills.forEach(function (o) { total += o.amount; if (o.paid) paid += o.amount; });
+  return { inc: inc, bills: bills, billsTotal: total, paidTotal: paid, unpaid: total - paid, remaining: inc.best - total, remainingEst: inc.est - total };
+}
+
+/* ---------- calendar (.ics) ---------- */
+function icsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+function icsFold(line) {
+  var out = [], cur = '', curLen = 0, max = 73;
+  Array.from(line).forEach(function (ch) {
+    var cp = ch.codePointAt(0), l = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    if (curLen + l > max) { out.push(cur); cur = ' ' + ch; curLen = 1 + l; max = 73; } else { cur += ch; curLen += l; }
+  });
+  out.push(cur);
+  return out.join('\r\n');
+}
+function icsDur(mins) {
+  var neg = mins > 0; // alarm BEFORE start => negative duration
+  var m = Math.abs(mins), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  var s = (neg ? '-' : '') + 'P' + (d ? d + 'D' : '') + ((h || mm || !d) ? 'T' + (h ? h + 'H' : '') + (mm ? mm + 'M' : (!h && !d ? '0S' : '')) : '');
+  return s;
+}
+function stamp(d) { return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + 'Z'; }
+function buildIcs() {
+  var L = [], now = stamp(new Date()), n = 0, t = today();
+  L.push('BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Money Plan//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Money Plan', 'X-WR-TIMEZONE:America/Chicago',
+    'BEGIN:VTIMEZONE', 'TZID:America/Chicago',
+    'BEGIN:DAYLIGHT', 'TZOFFSETFROM:-0600', 'TZOFFSETTO:-0500', 'TZNAME:CDT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'END:DAYLIGHT',
+    'BEGIN:STANDARD', 'TZOFFSETFROM:-0500', 'TZOFFSETTO:-0600', 'TZNAME:CST', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'END:STANDARD',
+    'END:VTIMEZONE');
+  var months = Math.max(1, Math.min(36, num(state.settings.icsMonths) || 12)), cm = thisMonth();
+  for (var i = 0; i < months; i++) {
+    billsInMonth(addMonths(cm, i)).forEach(function (o) {
+      var b = o.bill, d8 = o.date.replace(/-/g, ''), nx = addDays(o.date, 1).replace(/-/g, '');
+      var rems = billReminders(b);
+      var title = (o.paid ? '✓ PAID: ' : '💵 ') + b.name + ' — ' + money(o.amount) + (o.paid ? '' : ' due');
+      L.push('BEGIN:VEVENT', 'UID:moneyplan-' + b.id + '-' + o.mk + '@moneyplan.local', 'DTSTAMP:' + now,
+        'DTSTART;VALUE=DATE:' + d8, 'DTEND;VALUE=DATE:' + nx, 'SUMMARY:' + icsEsc(title),
+        'DESCRIPTION:' + icsEsc(b.category + (b.notes ? ' — ' + b.notes : '') + '\nMarked paid in Money Plan: ' + (o.paid ? 'yes' : 'no')),
+        'CATEGORIES:Money Plan', 'TRANSP:TRANSPARENT');
+      if (!o.paid) rems.forEach(function (r) {
+        var p = (r.time || '09:00').split(':').map(Number);
+        var mins = num(r.days) * 1440 - (p[0] * 60 + (p[1] || 0)); // minutes before 00:00 of due date
+        L.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(b.name + ' ' + money(o.amount) + ' due ' + dayLabel(o.date)), 'TRIGGER:' + icsDur(mins), 'END:VALARM');
+      });
+      L.push('END:VEVENT'); n++;
+      if (state.settings.timedEvents && !o.paid) {
+        rems.forEach(function (r, idx) {
+          var f = fireAt(o.date, r);
+          if (ymd(f) < t) return;
+          var st = ymd(f).replace(/-/g, '') + 'T' + pad(f.getHours()) + pad(f.getMinutes()) + '00';
+          var en = new Date(f.getTime() + 15 * 60000), et = ymd(en).replace(/-/g, '') + 'T' + pad(en.getHours()) + pad(en.getMinutes()) + '00';
+          L.push('BEGIN:VEVENT', 'UID:moneyplan-rem-' + b.id + '-' + o.mk + '-' + idx + '@moneyplan.local', 'DTSTAMP:' + now,
+            'DTSTART;TZID=America/Chicago:' + st, 'DTEND;TZID=America/Chicago:' + et,
+            'SUMMARY:' + icsEsc('⏰ ' + b.name + ' ' + money(o.amount) + ' due ' + dayLabel(o.date)), 'DESCRIPTION:' + icsEsc('Reminder from Money Plan'),
+            'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(b.name + ' due ' + dayLabel(o.date)), 'TRIGGER:PT0S', 'END:VALARM', 'END:VEVENT');
+          n++;
+        });
+      }
+    });
+  }
+  L.push('END:VCALENDAR');
+  return { text: L.map(icsFold).join('\r\n') + '\r\n', count: n };
+}
+function refreshIcs() {
+  var r = buildIcs();
+  try {
+    if (icsInfo.url) URL.revokeObjectURL(icsInfo.url);
+    icsInfo.url = URL.createObjectURL(new Blob([r.text], { type: 'text/calendar;charset=utf-8' }));
+  } catch (e) { icsInfo.url = null; }
+  icsInfo.count = r.count; icsInfo.at = new Date();
+  icsInfo.text = r.text;
+  document.querySelectorAll('[data-ics-link]').forEach(function (a) { if (icsInfo.url) a.href = icsInfo.url; });
+  document.querySelectorAll('[data-ics-count]').forEach(function (el) { el.textContent = icsInfo.count + ' events · updated ' + icsInfo.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); });
+}
+function scheduleIcs() { clearTimeout(icsTimer); icsTimer = setTimeout(refreshIcs, 250); }
+function downloadBlob(name, text, type) {
+  var url = URL.createObjectURL(new Blob([text], { type: type }));
+  var a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 1500);
+}
+function downloadIcs() { refreshIcs(); downloadBlob('money-plan.ics', icsInfo.text, 'text/calendar'); toast('Downloaded money-plan.ics — open it to add to Google Calendar'); }
+
+/* ---------- UI plumbing ---------- */
+var toastTimer;
+function toast(msg) {
+  var t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
+}
+function setPath(obj, path, val) {
+  var p = path.split('.'), o = obj;
+  for (var i = 0; i < p.length - 1; i++) { o = o[p[i]]; if (o == null) return; }
+  o[p[p.length - 1]] = val;
+}
+var TABS = [['dashboard', '📊', 'Dashboard'], ['payments', '🧾', 'Payments'], ['income', '💵', 'Income'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
+function renderTabs() {
+  $('#tabs').innerHTML = TABS.map(function (t) {
+    return '<button data-action="tab" data-tab="' + t[0] + '" class="' + (ui.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"><span class="ico">' + t[1] + '</span><span>' + t[2] + '</span></button>';
+  }).join('');
+}
+function render() {
+  renderTabs();
+  var fn = { dashboard: vDashboard, payments: vPayments, income: vIncome, reminders: vReminders, settings: vSettings }[ui.tab];
+  $('#view').innerHTML = fn();
+  if (icsInfo.url) document.querySelectorAll('[data-ics-link]').forEach(function (a) { a.href = icsInfo.url; });
+  document.querySelectorAll('[data-ics-count]').forEach(function (el) { if (icsInfo.at) el.textContent = icsInfo.count + ' events · updated ' + icsInfo.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); });
+  var sub = state.settings.userName ? state.settings.userName + "'s bills, paychecks & budget" : 'Bills, paychecks & household budget';
+  $('#subtitle').textContent = sub;
+}
+function monthBar() {
+  return '<div class="monthbar"><button data-action="month" data-d="-1" aria-label="Previous month">◀</button>' +
+    '<input type="month" data-month value="' + esc(ui.month) + '" aria-label="Month">' +
+    '<button data-action="month" data-d="1" aria-label="Next month">▶</button>' +
+    (ui.month !== thisMonth() ? '<button data-action="month-now" class="sm">This month</button>' : '') + '</div>';
+}
+function exPill(x) { return x && x.example ? ' <span class="pill ex">example</span>' : ''; }
+
+/* ---------- charts (SVG) ---------- */
+function short$(n) { var a = Math.abs(n); var s = a >= 10000 ? Math.round(a / 1000) + 'k' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : String(Math.round(a)); return (n < 0 ? '-$' : '$') + s; }
+function barChart(groups, legend) {
+  var W = 360, H = 190, padL = 8, padB = 24, padT = 18, ch = H - padB - padT;
+  var max = 1, min = 0;
+  groups.forEach(function (g) { g.s.forEach(function (s) { max = Math.max(max, s.v); min = Math.min(min, s.v); }); });
+  var range = max - min, zero = padT + ch * (max / range);
+  var gw = (W - padL * 2) / groups.length, ns = groups[0].s.length, bw = Math.min(34, (gw - 10) / ns);
+  var out = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Bar chart">';
+  out += '<line x1="0" x2="' + W + '" y1="' + zero + '" y2="' + zero + '" stroke="currentColor" opacity=".25"/>';
+  groups.forEach(function (g, gi) {
+    var cx = padL + gw * gi + gw / 2, x0 = cx - (bw * ns) / 2;
+    g.s.forEach(function (s, si) {
+      var hgt = Math.abs(s.v) / range * ch, y = s.v >= 0 ? zero - hgt : zero;
+      out += '<rect x="' + (x0 + si * bw + 1) + '" y="' + y + '" width="' + (bw - 2) + '" height="' + Math.max(hgt, s.v ? 1.5 : 0) + '" rx="4" fill="' + s.c + '"/>';
+      if (groups.length <= 4 || s.v) out += '<text class="val" x="' + (x0 + si * bw + bw / 2) + '" y="' + (s.v >= 0 ? y - 4 : y + hgt + 11) + '" text-anchor="middle">' + short$(s.v) + '</text>';
+    });
+    out += '<text x="' + cx + '" y="' + (H - 7) + '" text-anchor="middle">' + esc(g.l) + '</text>';
+  });
+  out += '</svg>';
+  if (legend) out += '<div class="legend">' + legend.map(function (l) { return '<span><i style="background:' + l[1] + '"></i>' + esc(l[0]) + '</span>'; }).join('') + '</div>';
+  return out;
+}
+
+/* ---------- Dashboard ---------- */
+function dueSoon() {
+  var now = new Date(), out = [];
+  upcomingList(45).forEach(function (o) {
+    var rems = billReminders(o.bill);
+    var started = rems.some(function (r) { return fireAt(o.date, r) <= now; });
+    if (started) out.push(o);
+  });
+  return out;
+}
+function vDashboard() {
+  var mk = ui.month, S = summary(mk), od = overdueList(), ds = dueSoon();
+  var h = monthBar();
+  // warnings
+  if (od.length) h += '<div class="alert bad">⚠️<div><b>' + od.length + ' overdue payment' + (od.length > 1 ? 's' : '') + ':</b> ' + od.slice(0, 4).map(function (o) { return esc(o.bill.name) + ' (' + dayLabel(o.date) + ')'; }).join(', ') + '. <a href="#" data-action="tab" data-tab="payments">Open Payments</a></div></div>';
+  if (S.inc.items.length === 0 && S.billsTotal > 0) h += '<div class="alert warn">ℹ️<div>No income is entered for ' + monthName(mk) + ' yet, so the budget looks empty. Add paychecks on the <a href="#" data-action="tab" data-tab="income">Income</a> tab (use “Repeat monthly” for regular ones).</div></div>';
+  else if (S.billsTotal > S.inc.best) h += '<div class="alert bad">🚨<div><b>Payments exceed income by ' + money(S.billsTotal - S.inc.best) + '</b> in ' + monthName(mk) + '. You will be short unless more income comes in.</div></div>';
+  else if (S.inc.best > 0 && S.billsTotal > S.inc.best * 0.85) h += '<div class="alert warn">⚠️<div>Fixed payments use ' + Math.round(S.billsTotal / S.inc.best * 100) + '% of this month’s income — tight margin.</div></div>';
+  else if (S.billsTotal > 0 && S.inc.best > 0) h += '<div class="alert ok">✅<div>Income covers your fixed payments for ' + monthName(mk) + '.</div></div>';
+  if (S.inc.est > 0 && S.inc.best < S.inc.est * 0.95 && S.inc.best >= S.billsTotal) h += '<div class="alert info">ℹ️<div>Actual deposits are ' + money(S.inc.est - S.inc.best) + ' lower than estimated.</div></div>';
+  if (ds.length) h += '<div class="alert info">🔔<div><b>Reminders active:</b> ' + ds.slice(0, 5).map(function (o) { var d = diffDays(o.date, today()); return esc(o.bill.name) + ' ' + money(o.amount) + ' (' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days') + ')'; }).join(' · ') + '</div></div>';
+
+  h += '<div class="grid g3">' +
+    '<div class="card stat"><div class="lbl">Income</div><div class="big">' + money(S.inc.best) + '</div><div class="sub">Estimated ' + money(S.inc.est) + '<br>Actual deposits entered ' + money(S.inc.actual) + '</div></div>' +
+    '<div class="card stat"><div class="lbl">Fixed payments</div><div class="big">' + money(S.billsTotal) + '</div><div class="sub">Paid ' + money(S.paidTotal) + '<br>Still to pay ' + money(S.unpaid) + '</div></div>' +
+    '<div class="card stat"><div class="lbl">Remaining</div><div class="big ' + (S.remaining < 0 ? 'neg' : 'pos') + '">' + money(S.remaining) + '</div><div class="sub">Income − payments<br>(vs. estimates only: ' + money(S.remainingEst) + ')</div></div></div>';
+
+  // chart this month
+  h += '<div class="card"><h3>' + esc(monthName(mk)) + ' at a glance</h3>' +
+    barChart([{ l: 'Est. income', s: [{ v: S.inc.est, c: '#94a3b8' }] }, { l: 'Income (actual/est.)', s: [{ v: S.inc.best, c: '#0f766e' }] }, { l: 'Payments', s: [{ v: S.billsTotal, c: '#ea580c' }] }, { l: 'Remaining', s: [{ v: S.remaining, c: S.remaining < 0 ? '#dc2626' : '#16a34a' }] }]) + '</div>';
+  // trend
+  var tr = [];
+  for (var i = -2; i <= 3; i++) { var m = addMonths(mk, i), s2 = summary(m); tr.push({ l: monthShort(m), s: [{ v: s2.inc.best, c: '#0f766e' }, { v: s2.billsTotal, c: '#ea580c' }] }); }
+  h += '<div class="card"><h3>6-month view</h3>' + barChart(tr, [['Income', '#0f766e'], ['Payments', '#ea580c']]) + '<p class="small muted">Months with no entered paychecks show $0 income. Mark regular paychecks “Repeat monthly” to project forward.</p></div>';
+
+  // categories
+  var cats = {};
+  S.bills.forEach(function (o) { cats[o.bill.category] = (cats[o.bill.category] || 0) + o.amount; });
+  var ck = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; });
+  h += '<div class="card"><h3>Payments by category</h3>' + (ck.length ? ck.map(function (c) {
+    var pct = S.billsTotal ? cats[c] / S.billsTotal * 100 : 0;
+    return '<div class="catrow"><div class="row between"><span>' + esc(c) + '</span><b>' + money(cats[c]) + ' <span class="muted small">' + Math.round(pct) + '%</span></b></div><div class="bar"><i style="width:' + pct + '%;background:' + CAT_COLORS[Math.max(0, CATS.indexOf(c))] + '"></i></div></div>';
+  }).join('') : '<div class="empty">No payments this month.</div>') + '</div>';
+
+  // next up
+  var nx = upcomingList(30).slice(0, 6);
+  h += '<div class="card"><div class="row between"><h3>Next 30 days</h3><button class="sm" data-action="tab" data-tab="payments">All payments</button></div>' +
+    (nx.length ? nx.map(billRow).join('') : '<div class="empty">Nothing due in the next 30 days 🎉</div>') + '</div>';
+  return h;
+}
+
+/* ---------- Payments ---------- */
+function billRow(o) {
+  var t = today(), d = diffDays(o.date, t), cls = o.paid ? 'pd' : (d < 0 ? 'od' : '');
+  var p = parseD(o.date), status = o.paid ? '<span class="pill ok">Paid ' + esc(o.paid.paidOn || '') + '</span>' : d < 0 ? '<span class="pill bad">Overdue ' + (-d) + 'd</span>' : d === 0 ? '<span class="pill warn">Due today</span>' : d <= 3 ? '<span class="pill warn">In ' + d + ' day' + (d > 1 ? 's' : '') + '</span>' : '';
+  return '<div class="item' + (o.paid ? ' paid' : '') + '"><div class="datebox ' + cls + '"><span>' + p.toLocaleDateString('en-US', { month: 'short' }) + '</span><b>' + p.getDate() + '</b></div>' +
+    '<div class="main click" data-action="edit-bill" data-id="' + esc(o.bill.id) + '"><div class="t">' + esc(o.bill.name) + exPill(o.bill) + '</div><div class="s">' + esc(o.bill.category) + ' · ' + (o.bill.recurrence === 'once' ? 'one-time' : 'monthly') + ' · ' + dayLabel(o.date) + ' ' + status + '</div></div>' +
+    '<div class="amt">' + money(o.amount) + '</div>' +
+    '<button class="sm ' + (o.paid ? '' : 'pri') + '" data-action="toggle-paid" data-key="' + esc(o.key) + '" data-amt="' + o.amount + '">' + (o.paid ? 'Undo' : 'Mark paid') + '</button></div>';
+}
+function vPayments() {
+  var od = overdueList(), list = billsInMonth(ui.month), tot = 0;
+  list.forEach(function (o) { tot += o.amount; });
+  var h = '<div class="row between" style="margin-top:14px"><h2 style="margin:0">Fixed payments</h2><div class="row"><button class="pri" data-action="add-bill">＋ Add payment</button></div></div>';
+  if (od.length) h += '<div class="card" style="border-color:var(--bad)"><h3 class="neg">⚠️ Overdue (' + od.length + ')</h3>' + od.map(billRow).join('') + '</div>';
+  h += monthBar() + '<div class="card"><div class="row between"><h3>Due in ' + esc(monthName(ui.month)) + '</h3><b>' + money(tot) + '</b></div>' +
+    (list.length ? list.map(billRow).join('') : '<div class="empty">No payments due this month.<br><br><button class="pri" data-action="add-bill">＋ Add a payment</button></div>') + '</div>';
+  h += '<div class="card"><h3>All bills (' + state.bills.length + ')</h3>' + (state.bills.length ? state.bills.map(function (b) {
+    return '<div class="item click" data-action="edit-bill" data-id="' + esc(b.id) + '"><div class="main"><div class="t">' + esc(b.name) + exPill(b) + (b.active === false ? ' <span class="pill warn">paused</span>' : '') + '</div><div class="s">' + esc(b.category) + ' · ' + (b.recurrence === 'once' ? 'one-time on ' + esc(b.dueDate) : 'monthly on the ' + ordinal(num(b.dueDay))) + '</div></div><div class="amt">' + money(b.amount) + '</div><span class="muted">✏️</span></div>';
+  }).join('') : '<div class="empty">No bills yet.</div>') + '</div>';
+  h += '<div class="card"><div class="row between"><div><h3>Add to Google Calendar</h3><p class="small muted" style="margin:4px 0 0">Calendar file with reminders, regenerated automatically on every change.</p></div><a class="btn pri" data-ics-link href="#" download="money-plan.ics" data-action="ics">⬇ Download .ics</a></div><p class="small muted" data-ics-count></p></div>';
+  return h;
+}
+
+/* ---------- Income ---------- */
+function breakdownTable(c, who) {
+  var rows = [];
+  if (who === 'g') {
+    rows.push(['Regular salary', c.salary], ['Bonus (supplemental)', c.bonus], ['Gross', c.gross, 1]);
+    rows.push(['Federal – regular wages', -c.fedReg], ['Federal – bonus (flat rate)', -c.fedBonus]);
+  } else {
+    rows.push(['Gross pay', c.gross, 1]);
+    if (c.preTax) rows.push(['Pre-tax deductions', -c.preTax]);
+    rows.push(['Federal withholding (est.)', -c.fed]);
+  }
+  rows.push(['Social Security', -c.ss], ['Medicare', -c.med]);
+  if (c.st) rows.push(['State tax', -c.st]); else rows.push(['Texas state tax', 0]);
+  if (c.other) rows.push(['Other deductions', -c.other]);
+  var net = who === 'g' ? c.est : c.net;
+  return '<table class="bd">' + rows.map(function (r) { return '<tr' + (r[2] ? ' style="font-weight:700"' : '') + '><td>' + r[0] + '</td><td>' + (r[1] < 0 ? '−' : '') + money(Math.abs(r[1])) + '</td></tr>'; }).join('') + '<tr class="tot"><td>Estimated take-home</td><td>' + money(net) + '</td></tr></table>';
+}
+function incomeRow(i) {
+  var p = parseD(i.date), dep = i.calc.deposit, has = i.actual != null && !dep, use = i.actual != null ? i.actual : i.est;
+  var h = '<div class="item" style="align-items:flex-start"><div class="datebox ' + (has || dep ? 'pd' : '') + '"><span>' + p.toLocaleDateString('en-US', { month: 'short' }) + '</span><b>' + p.getDate() + '</b></div><div class="main">';
+  h += '<div class="t">' + esc(i.label) + (i.entry ? exPill(i.entry) : '') + '</div>';
+  h += '<div class="s">' + dayLabel(i.date) + (dep ? ' · known deposit' : has ? ' · <b class="pos">actual deposit used</b>' : ' · estimate') + '</div>';
+  if (!dep) {
+    h += '<div class="s">Estimated take-home <b>' + money(i.est) + '</b>' + (has ? ' → actual <b>' + money(i.actual) + '</b>' : '') + '</div>';
+    h += '<details><summary>See estimate breakdown</summary>' + breakdownTable(i.calc, i.who) + '</details>';
+    h += '<label class="f">Actual deposit (replaces estimate)</label><div class="row"><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="e.g. 3850.00" data-actual="' + esc(i.key) + '" value="' + (has ? i.actual : '') + '" style="max-width:200px">' + (has ? '<button class="sm" data-action="clear-actual" data-key="' + esc(i.key) + '">Clear</button>' : '') + '</div>';
+  }
+  h += '</div><div class="amt">' + money(use) + '</div>';
+  if (i.entry) h += '<button class="sm ghost" data-action="edit-entry" data-id="' + esc(i.entry.id) + '" aria-label="Edit">✏️</button>';
+  return h + '</div>';
+}
+function bindField(label, path, o) {
+  o = o || {};
+  var v = path.split('.').reduce(function (a, k) { return a == null ? a : a[k]; }, state);
+  return '<div><label class="f">' + label + '</label><input type="' + (o.type || 'number') + '" ' + (o.type === 'date' ? '' : 'inputmode="decimal" step="' + (o.step || '0.01') + '" min="' + (o.min == null ? 0 : o.min) + '"') + (o.max ? ' max="' + o.max + '"' : '') + ' data-bind="' + path + '" data-type="' + (o.type || 'number') + '" value="' + esc(v) + '"></div>';
+}
+function vIncome() {
+  var h = '<div class="seg"><button data-action="inc-tab" data-t="g" class="' + (ui.inc === 'g' ? 'on' : '') + '">👤 ' + esc(state.settings.userName || 'My') + ' income</button><button data-action="inc-tab" data-t="w" class="' + (ui.inc === 'w' ? 'on' : '') + '">👩 Wife’s hourly</button></div>';
+  h += '<div class="alert info">ℹ️<div><b>Estimates, not tax advice.</b> Actual withholding depends on your W-4, pay frequency and employer. Enter real deposits to replace estimates.</div></div>';
+  h += monthBar();
+  return h + (ui.inc === 'g' ? vIncomeG() : vIncomeW());
+}
+function vIncomeG() {
+  var g = state.income.g, items = gOccurrences(ui.month), tot = 0, est = 0;
+  items.forEach(function (i) { tot += i.actual != null ? i.actual : i.est; est += i.est; });
+  var h = '<div class="card"><label class="chk"><input type="checkbox" data-bind="income.g.enabled" data-type="checkbox"' + (g.enabled ? ' checked' : '') + '> Include my income in the budget</label>' +
+    '<div class="fields">' + bindField('Bonus / supplemental federal rate %', 'income.g.supplementalPct', { step: '0.1', max: 100 }) + bindField('Federal withholding on regular salary %', 'income.g.fedRegPct', { step: '0.1', max: 100 }) + '</div>' +
+    '<p class="small muted">Bonuses are “supplemental wages”: employers commonly withhold a flat <b>22%</b> federal. Social Security (' + state.settings.ssPct + '%), Medicare (' + state.settings.medicarePct + '%) and Texas state tax (' + state.settings.statePct + '%) are set in <a href="#" data-action="tab" data-tab="settings">Settings</a>. The regular-salary % is a guess — match it to your pay stub.</p></div>';
+  h += '<div class="card"><div class="row between"><h3>' + esc(monthName(ui.month)) + '</h3><b>' + money(tot) + '</b></div><div class="small muted">Estimated ' + money(est) + '</div>' +
+    (items.length ? items.map(incomeRow).join('') : '<div class="empty">No paychecks entered for this month.</div>') +
+    '<div class="row" style="margin-top:12px"><button class="pri" data-action="add-entry">＋ Add paycheck / deposit</button></div></div>';
+  h += '<div class="card"><h3>All entries</h3>' + (g.entries.length ? g.entries.map(function (e) {
+    var c = gCalc(e);
+    return '<div class="item click" data-action="edit-entry" data-id="' + esc(e.id) + '"><div class="main"><div class="t">' + esc(e.label || 'Entry') + exPill(e) + '</div><div class="s">' + dayLabel(e.date) + ' · ' + (e.kind === 'deposit' ? 'take-home deposit' : 'paycheck, gross ' + money(c.gross)) + (e.repeat === 'monthly' ? ' · repeats monthly' : '') + '</div></div><div class="amt">' + money(c.est) + '</div><span class="muted">✏️</span></div>';
+  }).join('') : '<div class="empty">No entries yet.</div>') + '</div>';
+  return h;
+}
+function vIncomeW() {
+  var w = state.income.w, c = wCalc(), items = wOccurrences(ui.month), tot = 0, est = 0;
+  items.forEach(function (i) { tot += i.actual != null ? i.actual : i.est; est += i.est; });
+  var freq = function (v, l) { return '<option value="' + v + '"' + (w.frequency === v ? ' selected' : '') + '>' + l + '</option>'; };
+  var h = '<div class="card"><label class="chk"><input type="checkbox" data-bind="income.w.enabled" data-type="checkbox"' + (w.enabled ? ' checked' : '') + '> Include wife’s income in the budget' + exPill(w) + '</label>' +
+    '<div class="fields">' + bindField('Hourly rate ($)', 'income.w.rate') + bindField('Hours per week', 'income.w.hours', { step: '0.5' }) + '</div>' +
+    '<label class="chk"><input type="checkbox" data-bind="income.w.overtime" data-type="checkbox"' + (w.overtime ? ' checked' : '') + '> Overtime pay (1.5× after 40 hrs/week)</label>' +
+    (w.overtime ? '<div class="fields">' + bindField('Overtime after (hrs/week)', 'income.w.otThreshold', { step: '0.5' }) + bindField('Overtime multiplier', 'income.w.otMult', { step: '0.05' }) + '</div>' : '') +
+    '<div class="fields"><div><label class="f">Pay frequency</label><select data-bind="income.w.frequency" data-type="text">' + freq('weekly', 'Weekly') + freq('biweekly', 'Every 2 weeks') + freq('semimonthly', 'Twice a month') + '</select></div>' +
+    (w.frequency === 'semimonthly' ? bindField('First payday (day of month)', 'income.w.semiDay1', { step: '1', min: 1, max: 31 }) + bindField('Second payday (0 = last day)', 'income.w.semiDay2', { step: '1', min: 0, max: 31 }) : bindField('A known payday (sets the schedule)', 'income.w.anchor', { type: 'date' })) + '</div>' +
+    '<div class="fields">' + bindField('Pre-tax deductions per check ($)', 'income.w.preTax') + bindField('Other deductions per check ($)', 'income.w.otherDed') + '</div>' +
+    '<div class="fields"><div><label class="f">Federal withholding method</label><select data-bind="income.w.fedMode" data-type="text"><option value="percent"' + (w.fedMode === 'percent' ? ' selected' : '') + '>Flat % (editable)</option><option value="simple"' + (w.fedMode === 'simple' ? ' selected' : '') + '>Simple estimate (her wages only)</option></select></div>' +
+    (w.fedMode === 'percent' ? bindField('Federal withholding %', 'income.w.fedPct', { step: '0.1', max: 100 }) : '<div><label class="f">Filing status</label><select data-bind="income.w.filing" data-type="text"><option value="married"' + (w.filing === 'married' ? ' selected' : '') + '>Married filing jointly</option><option value="single"' + (w.filing === 'single' ? ' selected' : '') + '>Single</option></select></div>') + '</div>' +
+    '<p class="small muted">Texas has no state income tax. Simple estimate uses approximate 2026 brackets and standard deduction on her wages alone — a rough guide only. Example values (hours, payday, withholding) are placeholders: edit to match her pay stub.</p></div>';
+  h += '<div class="grid g3"><div class="card stat"><div class="lbl">Gross / paycheck</div><div class="big">' + money(c.gross) + '</div><div class="sub">' + (c.otH && w.overtime ? c.regH + ' reg + ' + c.otH + ' OT hrs/wk' : num(w.hours) + ' hrs/wk') + '</div></div>' +
+    '<div class="card stat"><div class="lbl">Est. take-home / paycheck</div><div class="big pos">' + money(c.net) + '</div><div class="sub">' + c.per + ' paychecks/year</div></div>' +
+    '<div class="card stat"><div class="lbl">Est. take-home / month</div><div class="big pos">' + money(c.monthlyNet) + '</div><div class="sub">average (' + c.per + ' ÷ 12)</div></div></div>';
+  h += '<div class="card"><h3>Per-paycheck estimate</h3>' + breakdownTable(c, 'w') + '</div>';
+  h += '<div class="card"><div class="row between"><h3>Paydays in ' + esc(monthName(ui.month)) + '</h3><b>' + money(tot) + '</b></div><div class="small muted">Estimated ' + money(est) + '</div>' +
+    (items.length ? items.map(incomeRow).join('') : '<div class="empty">' + (w.enabled ? 'No paydays this month.' : 'Wife’s income is switched off.') + '</div>') + '</div>';
+  return h;
+}
+
+/* ---------- Reminders ---------- */
+function remEditor(list, base) {
+  return list.map(function (r, i) {
+    return '<div class="remrow"><div><label class="f">Days before</label><input type="number" min="0" max="60" step="1" inputmode="numeric" data-bind="' + base + '.' + i + '.days" data-type="number" value="' + esc(r.days) + '"></div>' +
+      '<div><label class="f">At time</label><input type="time" data-bind="' + base + '.' + i + '.time" data-type="text" value="' + esc(r.time) + '"></div>' +
+      '<button class="danger sm" data-action="del-rem" data-i="' + i + '" aria-label="Remove reminder">✕</button></div>';
+  }).join('');
+}
+function vReminders() {
+  var s = state.settings, now = new Date(), up = [];
+  upcomingList(60).forEach(function (o) { billReminders(o.bill).forEach(function (r) { var f = fireAt(o.date, r); if (f >= now) up.push({ f: f, o: o, r: r }); }); });
+  up.sort(function (a, b) { return a.f - b.f; });
+  var h = '<h2>Reminders & calendar</h2>';
+  h += '<div class="card"><h3>Default reminders</h3><p class="small muted">Applied to every payment unless a payment has its own custom reminders.</p>' + remEditor(s.reminders, 'settings.reminders') +
+    '<button data-action="add-rem">＋ Add reminder</button> <span class="small muted">Tip: “1 day before at 9:00 AM” matches your Google Calendar habit.</span></div>';
+  h += '<div class="card"><h3>Google Calendar (.ics)</h3>' +
+    '<div class="alert warn">ℹ️<div>A private <b>subscribe</b> link isn’t possible here — this app runs only on your device with no server. Use the <b>.ics download</b>; it’s rebuilt automatically after every change, so just download again when things change.</div></div>' +
+    '<div class="fields">' + bindField('Months ahead to include', 'settings.icsMonths', { step: '1', min: 1, max: 36 }) + '</div>' +
+    '<label class="chk"><input type="checkbox" data-bind="settings.timedEvents" data-type="checkbox"' + (s.timedEvents ? ' checked' : '') + '> Also add separate timed reminder events</label>' +
+    '<p class="small muted" style="margin-top:0">Google Calendar sometimes ignores alerts inside imported files and uses your calendar’s default notifications instead. Turning this on adds a small timed “⏰” event at each reminder time that will always notify you.</p>' +
+    '<a class="btn pri" data-ics-link href="#" download="money-plan.ics" data-action="ics" style="width:100%">⬇ Download money-plan.ics</a><p class="small muted" data-ics-count></p>' +
+    '<b>How to add it on Android</b><ol class="steps"><li>Tap <b>Download</b>, then open the file from your notifications or the Files / Downloads app.</li><li>Choose <b>Calendar</b> (Google Calendar) and pick the calendar to add events to.</li><li>If the app doesn’t offer it: on a computer open <code class="k">calendar.google.com</code> → Settings → Import &amp; export → Import.</li><li>Re-importing later updates the same events (they have fixed IDs). Tip: import into a dedicated “Money Plan” calendar so it’s easy to remove.</li></ol></div>';
+  h += '<div class="card"><h3>In-app notifications</h3><label class="chk"><input type="checkbox" data-bind="settings.notify" data-type="checkbox"' + (s.notify ? ' checked' : '') + '> Show phone notifications when I open Money Plan</label><p class="small muted" style="margin-top:0">Browsers can only notify while the app is open or running in the background. For reliable alerts use the calendar file above.</p></div>';
+  h += '<div class="card"><h3>Upcoming reminders</h3>' + (up.length ? up.slice(0, 10).map(function (x) {
+    return '<div class="item"><div class="main"><div class="t">' + esc(x.o.bill.name) + ' · ' + money(x.o.amount) + '</div><div class="s">Alert ' + x.f.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + timeLabel(pad(x.f.getHours()) + ':' + pad(x.f.getMinutes())) + ' · due ' + dayLabel(x.o.date) + '</div></div></div>';
+  }).join('') : '<div class="empty">No upcoming reminders.</div>') + '</div>';
+  return h;
+}
+
+/* ---------- Settings ---------- */
+function vSettings() {
+  var s = state.settings;
+  return '<h2>Settings</h2>' +
+    '<div class="card"><h3>General</h3><label class="f">Your name</label><input type="text" data-bind="settings.userName" data-type="text" value="' + esc(s.userName) + '"></div>' +
+    '<div class="card"><h3>Payroll tax rates (estimates)</h3><div class="fields">' + bindField('Social Security %', 'settings.ssPct', { step: '0.01' }) + bindField('Medicare %', 'settings.medicarePct', { step: '0.01' }) + bindField('Texas state tax %', 'settings.statePct', { step: '0.01' }) + '</div>' +
+    '<p class="small muted">Defaults: Social Security 6.2% (stops above the annual wage cap — not modeled), Medicare 1.45% (no additional Medicare tax modeled), Texas 0%. Figures are estimates, not tax advice.</p></div>' +
+    '<div class="card"><h3>Backup &amp; restore</h3><p class="small muted">Your data is stored only in this browser. Export a JSON backup now and then (and before clearing browser data).</p>' +
+    '<div class="row"><button class="pri" data-action="export">⬇ Export backup (JSON)</button><button data-action="import">⬆ Import backup</button></div>' +
+    '<input type="file" id="importFile" accept=".json,application/json" hidden></div>' +
+    '<div class="card"><h3>Reset</h3><div class="row"><button data-action="reset-example">Restore example data</button><button class="danger" data-action="wipe">Delete everything</button></div></div>' +
+    '<div class="card"><h3>About</h3><p class="small muted">Money Plan v1 · works offline · no accounts, no tracking, no external requests. Seeded “example” items are editable and can be deleted.</p></div>';
+}
+
+/* ---------- Modals ---------- */
+var modalCfg = null;
+function openModal(cfg) { modalCfg = cfg; drawModal(); var m = $('#modal'); m.hidden = false; var f = $('input:not([type=hidden]),select', m); if (f && cfg.focus !== false && window.innerWidth > 700) f.focus(); }
+function drawModal() {
+  var c = modalCfg;
+  $('#modal').innerHTML = '<form class="modal" novalidate autocomplete="off"><div class="row between"><h2 style="margin:0">' + c.title + '</h2><button type="button" class="sm ghost" data-maction="close" aria-label="Close">✕</button></div>' +
+    c.body(c.draft) + '<div class="err" id="merr"></div><div class="actions"><button class="pri" type="submit">' + (c.saveLabel || 'Save') + '</button><button type="button" data-maction="close">Cancel</button>' + (c.onDelete ? '<button type="button" class="danger" data-maction="delete">Delete</button>' : '') + '</div></form>';
+  if (c.after) c.after(c.draft);
+}
+function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; modalCfg = null; }
+function syncModal() { var f = $('#modal form'); if (f && modalCfg && modalCfg.sync) modalCfg.sync(f, modalCfg.draft); }
+function fv(f, n) { var e = f.elements[n]; return e ? (e.type === 'checkbox' ? e.checked : e.value) : ''; }
+
+function billModal(id) {
+  var ex = id ? state.bills.find(function (b) { return b.id === id; }) : null;
+  var d = ex ? clone(ex) : { id: null, name: '', amount: '', category: 'Other', recurrence: 'monthly', dueDay: 1, dueDate: today(), startMonth: thisMonth(), notes: '', reminders: null, active: true };
+  if (!d.dueDate) d.dueDate = today();
+  if (!d.startMonth) d.startMonth = thisMonth();
+  d.remMode = d.reminders ? 'custom' : 'default';
+  if (!d.reminders) d.reminders = clone(state.settings.reminders);
+  openModal({
+    title: ex ? 'Edit payment' : 'Add payment', draft: d, focus: !ex,
+    sync: function (f, d) {
+      d.name = fv(f, 'name'); d.amount = fv(f, 'amount'); d.category = fv(f, 'category'); d.recurrence = fv(f, 'recurrence');
+      d.dueDay = fv(f, 'dueDay'); d.dueDate = fv(f, 'dueDate') || d.dueDate; d.startMonth = fv(f, 'startMonth') || d.startMonth; d.notes = fv(f, 'notes'); d.active = fv(f, 'active');
+      d.remMode = fv(f, 'remMode') || 'default';
+      if (d.remMode === 'custom') d.reminders = d.reminders.map(function (r, i) { return f.elements['rd' + i] ? { days: fv(f, 'rd' + i), time: fv(f, 'rt' + i) || '09:00' } : r; });
+    },
+    body: function (d) {
+      return '<label class="f">Name</label><input name="name" required placeholder="e.g. Electric bill" value="' + esc(d.name) + '">' +
+        '<div class="fields"><div><label class="f">Amount ($)</label><input name="amount" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(d.amount) + '"></div>' +
+        '<div><label class="f">Category</label><select name="category">' + CATS.map(function (c) { return '<option' + (d.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></div></div>' +
+        '<div class="fields"><div><label class="f">Repeats</label><select name="recurrence" data-rerender><option value="monthly"' + (d.recurrence === 'monthly' ? ' selected' : '') + '>Every month</option><option value="once"' + (d.recurrence === 'once' ? ' selected' : '') + '>One-time</option></select></div>' +
+        (d.recurrence === 'monthly' ? '<div><label class="f">Due day of month (1–31)</label><input name="dueDay" type="number" inputmode="numeric" min="1" max="31" step="1" value="' + esc(d.dueDay) + '"></div></div><label class="f">Starting month</label><input name="startMonth" type="month" value="' + esc(d.startMonth) + '"><div class="small muted">Months before this are never shown as overdue. Short months use the last day.</div>' :
+          '<div><label class="f">Due date</label><input name="dueDate" type="date" value="' + esc(d.dueDate) + '"></div></div>') +
+        '<label class="f">Notes (optional)</label><input name="notes" value="' + esc(d.notes) + '" placeholder="Account hint, autopay, etc. — no ID numbers">' +
+        '<label class="chk"><input type="checkbox" name="active"' + (d.active !== false ? ' checked' : '') + '> Active</label>' +
+        '<label class="f">Reminders</label><div class="row"><label class="chk"><input type="radio" name="remMode" value="default" data-rerender' + (d.remMode === 'default' ? ' checked' : '') + '> Use defaults</label><label class="chk"><input type="radio" name="remMode" value="custom" data-rerender' + (d.remMode === 'custom' ? ' checked' : '') + '> Custom</label></div>' +
+        (d.remMode === 'custom' ? d.reminders.map(function (r, i) {
+          return '<div class="remrow"><div><label class="f">Days before</label><input name="rd' + i + '" type="number" min="0" max="60" value="' + esc(r.days) + '"></div><div><label class="f">At time</label><input name="rt' + i + '" type="time" value="' + esc(r.time) + '"></div><button type="button" class="danger sm" data-maction="del-rem" data-i="' + i + '">✕</button></div>';
+        }).join('') + '<button type="button" class="sm" data-maction="add-rem">＋ Add reminder</button>' :
+          '<div class="small muted">' + state.settings.reminders.map(remLabel).join(' · ') + '</div>');
+    },
+    onSave: function (d) {
+      if (!String(d.name).trim()) return 'Please enter a name.';
+      if (!(num(d.amount) >= 0) || d.amount === '') return 'Please enter an amount.';
+      var rec = { id: d.id || uid(), name: String(d.name).trim(), amount: round2(num(d.amount)), category: d.category, recurrence: d.recurrence, dueDay: Math.min(31, Math.max(1, Math.round(num(d.dueDay) || 1))), dueDate: d.recurrence === 'once' ? d.dueDate : '', startMonth: d.startMonth, notes: String(d.notes || '').trim(), reminders: d.remMode === 'custom' ? d.reminders.map(function (r) { return { days: Math.max(0, Math.round(num(r.days))), time: r.time || '09:00' }; }) : null, active: d.active !== false, example: false };
+      if (rec.recurrence === 'once' && !rec.dueDate) return 'Please pick a due date.';
+      if (d.id) { var i = state.bills.findIndex(function (b) { return b.id === d.id; }); state.bills[i] = rec; } else state.bills.push(rec);
+      save(); render(); toast('Payment saved'); return true;
+    },
+    onDelete: d.id ? function () {
+      if (!confirm('Delete "' + d.name + '" and its paid history?')) return false;
+      state.bills = state.bills.filter(function (b) { return b.id !== d.id; });
+      Object.keys(state.paid).forEach(function (k) { if (k.indexOf(d.id + '|') === 0) delete state.paid[k]; });
+      save(); render(); toast('Payment deleted'); return true;
+    } : null,
+    extra: { addRem: function (d) { d.reminders.push({ days: 1, time: '09:00' }); }, delRem: function (d, i) { d.reminders.splice(i, 1); } }
+  });
+}
+function entryModal(id) {
+  var ex = id ? state.income.g.entries.find(function (e) { return e.id === id; }) : null;
+  var d = ex ? clone(ex) : { id: null, kind: 'paycheck', label: '', date: ui.month === thisMonth() ? today() : ui.month + '-01', salary: '', bonus: '', otherDed: '', amount: '', repeat: 'none' };
+  openModal({
+    title: ex ? 'Edit paycheck / deposit' : 'Add paycheck / deposit', draft: d, focus: !ex,
+    sync: function (f, d) { ['kind', 'label', 'date', 'salary', 'bonus', 'otherDed', 'amount'].forEach(function (k) { d[k] = fv(f, k); }); d.repeat = fv(f, 'repeat') ? 'monthly' : 'none'; },
+    body: function (d) {
+      return '<label class="f">Type</label><select name="kind" data-rerender><option value="paycheck"' + (d.kind === 'paycheck' ? ' selected' : '') + '>Paycheck — estimate take-home from gross</option><option value="deposit"' + (d.kind === 'deposit' ? ' selected' : '') + '>Deposit — I already know the take-home amount</option></select>' +
+        '<label class="f">Label</label><input name="label" placeholder="e.g. Paycheck" value="' + esc(d.label) + '"><label class="f">Date</label><input name="date" type="date" value="' + esc(d.date) + '">' +
+        (d.kind === 'deposit' ? '<label class="f">Take-home amount ($)</label><input name="amount" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(d.amount) + '">' :
+          '<div class="fields"><div><label class="f">Regular salary ($, gross)</label><input name="salary" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.salary) + '"></div><div><label class="f">Bonus ($, gross)</label><input name="bonus" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.bonus) + '"></div></div>' +
+          '<label class="f">Other deductions ($ — insurance, 401k, etc.)</label><input name="otherDed" type="number" inputmode="decimal" step="0.01" min="0" data-live value="' + esc(d.otherDed) + '"><div class="card" style="margin:12px 0 0" id="prev"></div>') +
+        '<label class="chk"><input type="checkbox" name="repeat"' + (d.repeat === 'monthly' ? ' checked' : '') + '> Repeat every month (same day)</label>';
+    },
+    after: function (d) { updatePreview(); },
+    onSave: function (d) {
+      if (d.kind === 'deposit' && (d.amount === '' || num(d.amount) < 0)) return 'Enter the deposit amount.';
+      if (!d.date) return 'Pick a date.';
+      var rec = { id: d.id || uid(), kind: d.kind, label: String(d.label).trim(), date: d.date, salary: num(d.salary), bonus: num(d.bonus), otherDed: num(d.otherDed), amount: num(d.amount), repeat: d.repeat, example: false };
+      var L = state.income.g.entries;
+      if (d.id) { L[L.findIndex(function (e) { return e.id === d.id; })] = rec; } else L.push(rec);
+      save(); render(); toast('Saved'); return true;
+    },
+    onDelete: d.id ? function () {
+      if (!confirm('Delete this entry?')) return false;
+      state.income.g.entries = state.income.g.entries.filter(function (e) { return e.id !== d.id; });
+      save(); render(); return true;
+    } : null
+  });
+}
+function updatePreview() {
+  var f = $('#modal form'), p = $('#prev'); if (!f || !p || !modalCfg) return;
+  var d = { kind: 'paycheck', salary: fv(f, 'salary'), bonus: fv(f, 'bonus'), otherDed: fv(f, 'otherDed') };
+  var c = gCalc(d);
+  p.innerHTML = '<b>Estimated take-home: ' + money(c.est) + '</b><div class="small muted">Gross ' + money(c.gross) + ' − federal ' + money(c.fed) + ' − SS ' + money(c.ss) + ' − Medicare ' + money(c.med) + (c.other ? ' − other ' + money(c.other) : '') + '. Estimate only.</div>';
+}
+
+/* ---------- Backup ---------- */
+function exportJson() {
+  var name = 'money-plan-backup-' + today() + '.json';
+  downloadBlob(name, JSON.stringify({ app: 'money-plan', exportedAt: new Date().toISOString(), data: state }, null, 2), 'application/json');
+  toast('Backup downloaded');
+}
+function importJson(file) {
+  var r = new FileReader();
+  r.onload = function () {
+    try {
+      var j = JSON.parse(r.result), data = j && j.data ? j.data : j;
+      if (!data || !Array.isArray(data.bills) || !data.income) throw new Error('bad');
+      if (!confirm('Replace ALL current data with this backup?')) return;
+      state = normalize(data); save(); render(); toast('Backup restored');
+    } catch (e) { alert('That file is not a valid Money Plan backup.'); }
+  };
+  r.readAsText(file);
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('click', function (ev) {
+  var m = ev.target.closest('[data-maction]');
+  if (m && modalCfg) {
+    var a = m.getAttribute('data-maction');
+    if (a === 'close') { closeModal(); return; }
+    if (a === 'delete') { if (modalCfg.onDelete() === true) closeModal(); return; }
+    syncModal();
+    if (a === 'add-rem') modalCfg.extra.addRem(modalCfg.draft);
+    if (a === 'del-rem') modalCfg.extra.delRem(modalCfg.draft, +m.getAttribute('data-i'));
+    drawModal(); return;
+  }
+  if (ev.target === $('#modal')) { closeModal(); return; }
+  var el = ev.target.closest('[data-action]');
+  if (!el) return;
+  var act = el.getAttribute('data-action'), id = el.getAttribute('data-id');
+  if (act === 'ics') { ev.preventDefault(); downloadIcs(); return; }
+  if (el.tagName === 'A') ev.preventDefault();
+  switch (act) {
+    case 'tab': ui.tab = el.getAttribute('data-tab'); render(); window.scrollTo(0, 0); break;
+    case 'month': ui.month = addMonths(ui.month, +el.getAttribute('data-d')); render(); break;
+    case 'month-now': ui.month = thisMonth(); render(); break;
+    case 'inc-tab': ui.inc = el.getAttribute('data-t'); render(); break;
+    case 'add-bill': billModal(null); break;
+    case 'edit-bill': billModal(id); break;
+    case 'add-entry': entryModal(null); break;
+    case 'edit-entry': entryModal(id); break;
+    case 'toggle-paid':
+      var k = el.getAttribute('data-key');
+      if (state.paid[k]) { delete state.paid[k]; toast('Marked unpaid'); } else { state.paid[k] = { paidOn: today(), amount: num(el.getAttribute('data-amt')) }; toast('Marked paid ✓'); }
+      save(); render(); break;
+    case 'clear-actual': delete state.actuals[el.getAttribute('data-key')]; save(); render(); break;
+    case 'add-rem': state.settings.reminders.push({ days: 1, time: '09:00' }); save(); render(); break;
+    case 'del-rem': state.settings.reminders.splice(+el.getAttribute('data-i'), 1); save(); render(); break;
+    case 'export': exportJson(); break;
+    case 'import': $('#importFile').click(); break;
+    case 'reset-example': if (confirm('Replace everything with the example data?')) { state = exampleState(); save(); render(); toast('Example data restored'); } break;
+    case 'wipe': if (confirm('Delete ALL data? This cannot be undone (export a backup first).')) { var e0 = exampleState(); state = fill(e0, { bills: [], income: { g: { entries: [] } }, paid: {}, actuals: {} }); state.bills = []; state.income.g.entries = []; state.income.w.example = false; save(); render(); toast('All data deleted'); } break;
+  }
+});
+document.addEventListener('change', function (ev) {
+  var t = ev.target;
+  if (t.id === 'importFile') { if (t.files[0]) importJson(t.files[0]); t.value = ''; return; }
+  if (modalCfg && t.closest('#modal')) { if (t.hasAttribute('data-rerender')) { syncModal(); drawModal(); } return; }
+  if (t.hasAttribute('data-month')) { if (/^\d{4}-\d{2}$/.test(t.value)) { ui.month = t.value; render(); } return; }
+  if (t.hasAttribute('data-actual')) {
+    var key = t.getAttribute('data-actual');
+    if (t.value === '') delete state.actuals[key]; else state.actuals[key] = round2(num(t.value));
+    save(); render(); return;
+  }
+  if (t.hasAttribute('data-bind')) {
+    var path = t.getAttribute('data-bind'), type = t.getAttribute('data-type'), v;
+    v = type === 'checkbox' ? t.checked : type === 'number' ? (t.value === '' ? 0 : num(t.value)) : t.value;
+    setPath(state, path, v); save();
+    if (path === 'settings.notify' && v && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    render();
+  }
+});
+document.addEventListener('input', function (ev) { if (ev.target.hasAttribute && ev.target.hasAttribute('data-live') && modalCfg) updatePreview(); });
+document.addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  if (!modalCfg) return;
+  syncModal();
+  var r = modalCfg.onSave(modalCfg.draft);
+  if (r === true) closeModal(); else $('#merr').textContent = r || '';
+});
+document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && modalCfg) closeModal(); });
+
+/* ---------- Browser notifications (only while app is open) ---------- */
+function checkNotifications() {
+  if (!state.settings.notify || !('Notification' in window) || Notification.permission !== 'granted') return;
+  var now = new Date(), changed = false;
+  upcomingList(45).forEach(function (o) {
+    billReminders(o.bill).forEach(function (r) {
+      var f = fireAt(o.date, r), k = o.key + '|' + r.days + '|' + r.time;
+      if (f <= now && now - f < 36 * 3600000 && !state.notified[k]) {
+        try { new Notification('Money Plan: ' + o.bill.name + ' ' + money(o.amount), { body: 'Due ' + dayLabel(o.date) }); } catch (e) { /* ignore */ }
+        state.notified[k] = Date.now(); changed = true;
+      }
+    });
+  });
+  if (changed) save(true);
+}
+
+/* ---------- Start ---------- */
+var hashTab = (location.hash || '').replace('#', '').split('/')[0];
+if (TABS.some(function (t) { return t[0] === hashTab; })) ui.tab = hashTab;
+if (/^(g|w)$/.test((location.hash.split('/')[1] || ''))) ui.inc = location.hash.split('/')[1];
+render();
+refreshIcs();
+setInterval(checkNotifications, 60000);
+setTimeout(checkNotifications, 2000);
+window.__moneyplan = { state: function () { return state; }, buildIcs: buildIcs, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+})();
+
+</script>
+</body>
+</html>
