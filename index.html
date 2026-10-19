@@ -192,7 +192,7 @@ function exampleState() {
         children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: true,
         entries: [
           { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true },
-          { id: 'sd_bonus_2026_09', kind: 'paycheck', label: 'September 2026 sales bonus — on Oct 5 paycheck', date: '2026-10-05', salary: 0, bonus: 4052, otherDed: 0, amount: 0, repeat: 'none', example: false },
+          { id: 'sd_bonus_2026_09', kind: 'deposit', category: 'bonus', label: 'September 2026 sales bonus — on Oct 5 paycheck', date: '2026-10-05', salary: 0, bonus: 0, otherDed: 0, amount: 4052, repeat: 'none', example: false },
           { id: 'sd_bonus_2026_10', kind: 'paycheck', label: 'October 2026 sales bonus ($46,056 sales, 7%) — on Nov 5 paycheck', date: '2026-11-05', salary: 0, bonus: 3223.92, otherDed: 0, amount: 0, repeat: 'none', example: false },
           { id: 'sd_mexico', kind: 'deposit', label: 'Money from Mexico (take-home, 1st of month)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 3400, repeat: 'monthly', example: false }
         ]
@@ -257,7 +257,7 @@ function mergeSeedBills(st) {
   st.billsSeedAdded = added;
   return added;
 }
-function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; st.migr7 = true; st.migr8 = true; mergeSeedBills(st); return st; }
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; st.migr7 = true; st.migr8 = true; st.migr9 = true; mergeSeedBills(st); return st; }
 
 function fill(base, over) {
   if (over == null) return base;
@@ -299,8 +299,11 @@ function normalize(s) {
   }
   st.migr7 = true;
   // v8: real Sept 2026 bonus on the Oct 5 paycheck, added once
-  if (!(s && s.migr8) && !st.income.g.entries.some(function (e) { return e.id === 'sd_bonus_2026_09'; })) st.income.g.entries.push({ id: 'sd_bonus_2026_09', kind: 'paycheck', label: 'September 2026 sales bonus — on Oct 5 paycheck', date: '2026-10-05', salary: 0, bonus: 4052, otherDed: 0, amount: 0, repeat: 'none', example: false });
+  if (!(s && s.migr8) && !st.income.g.entries.some(function (e) { return e.id === 'sd_bonus_2026_09'; })) st.income.g.entries.push({ id: 'sd_bonus_2026_09', kind: 'deposit', category: 'bonus', label: 'September 2026 sales bonus — on Oct 5 paycheck', date: '2026-10-05', salary: 0, bonus: 0, otherDed: 0, amount: 4052, repeat: 'none', example: false });
   st.migr8 = true;
+  // v9: the Sept bonus $4,052 is take-home (net), not gross
+  if (!(s && s.migr9)) st.income.g.entries.forEach(function (e) { if (e.id === 'sd_bonus_2026_09' && e.kind === 'paycheck' && num(e.bonus) === 4052) { e.kind = 'deposit'; e.category = 'bonus'; e.amount = 4052; e.bonus = 0; } });
+  st.migr9 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
@@ -984,7 +987,7 @@ function incomeBreakdown(mk) {
     if (i.who === 'w') k = 'wife';
     else if (e.id === 'sd_mexico') k = 'mexico';
     else if (se && e.id === se.id) k = 'salary';
-    else if (e.kind !== 'deposit' && num(e.bonus) > 0 && num(e.salary) === 0) k = 'bonus';
+    else if (e.category === 'bonus' || (e.kind !== 'deposit' && num(e.bonus) > 0 && num(e.salary) === 0)) k = 'bonus';
     else k = 'other';
     groups[k].push({ date: i.date, label: i.label, amount: round2(amt), gross: i.calc.deposit ? null : i.calc.gross, est: i.est, actual: i.actual, deposit: !!i.calc.deposit, calc: i.calc });
   });
@@ -1177,7 +1180,7 @@ function entryModal(id) {
     onSave: function (d) {
       if (d.kind === 'deposit' && (d.amount === '' || num(d.amount) < 0)) return 'Enter the deposit amount.';
       if (!d.date) return 'Pick a date.';
-      var rec = { id: d.id || uid(), kind: d.kind, label: String(d.label).trim(), date: d.date, salary: num(d.salary), bonus: num(d.bonus), otherDed: num(d.otherDed), amount: num(d.amount), repeat: d.repeat, example: false };
+      var rec = { id: d.id || uid(), kind: d.kind, label: String(d.label).trim(), date: d.date, salary: num(d.salary), bonus: num(d.bonus), otherDed: num(d.otherDed), amount: num(d.amount), repeat: d.repeat, example: false }; if (d.category) rec.category = d.category;
       if (d.repeat === 'semimonthly') { rec.day2 = Math.min(31, Math.max(1, Math.round(num(d.day2) || 20))); }
       var L = state.income.g.entries;
       if (d.id) { L[L.findIndex(function (e) { return e.id === d.id; })] = rec; } else L.push(rec);
