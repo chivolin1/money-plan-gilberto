@@ -190,7 +190,7 @@ function exampleState() {
         ]
       },
       w: {
-        enabled: true, rate: 18, hours: 40, overtime: true, otThreshold: 40, otMult: 1.5,
+        enabled: false, rate: 18, hours: 40, overtime: true, otThreshold: 40, otMult: 1.5,
         frequency: 'biweekly', anchor: '2026-10-16', semiDay1: 15, semiDay2: 0,
         preTax: 0, otherDed: 0, fedMode: 'percent', fedPct: 8, filing: 'married', example: true
       }
@@ -249,7 +249,7 @@ function mergeSeedBills(st) {
   st.billsSeedAdded = added;
   return added;
 }
-function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; mergeSeedBills(st); return st; }
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; mergeSeedBills(st); return st; }
 
 function fill(base, over) {
   if (over == null) return base;
@@ -280,6 +280,9 @@ function normalize(s) {
   // v5: add the monthly Mexico deposit once (not re-added if the user deletes it)
   if (!(s && s.migr5)) { if (!Array.isArray(st.income.g.entries)) st.income.g.entries = []; if (!st.income.g.entries.some(function (e) { return e.id === 'sd_mexico'; })) st.income.g.entries.push({ id: 'sd_mexico', kind: 'deposit', label: 'Money from Mexico (take-home, 1st of month)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 3400, repeat: 'monthly', example: false }); }
   st.migr5 = true;
+  // v6: wife currently has no income; switch her pay off once (she can turn it back on)
+  if (!(s && s.migr6)) st.income.w.enabled = false;
+  st.migr6 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
