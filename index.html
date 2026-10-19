@@ -173,7 +173,7 @@ function exampleState() {
     },
     bills: [
       { id: 'ex_renters', name: 'Renters insurance', amount: 24.25, category: 'Insurance', recurrence: 'monthly', dueDay: 27, dueDate: '', startMonth: '2026-10', notes: 'EXAMPLE from your calendar — edit freely.', reminders: null, active: true, example: true },
-      { id: 'ex_flex', name: 'Flex rent', amount: 515, category: 'Housing', recurrence: 'monthly', dueDay: 16, dueDate: '', startMonth: '2026-10', notes: 'EXAMPLE from your calendar — edit freely.', reminders: null, active: true, example: true }
+      { id: 'ex_flex', name: 'Flex rent', amount: 515, category: 'Housing', recurrence: 'monthly', dueDay: 16, dueDate: '', startMonth: '2026-10', notes: 'Flex 2nd rent payment (charged around the 15th–16th). EXAMPLE from your calendar — edit freely.', reminders: null, active: true, example: true }
     ],
     paid: {},
     actuals: {},
@@ -197,6 +197,59 @@ function exampleState() {
   };
 }
 
+/* ---------- your bills from email & calendar (seed v1) ---------- */
+var BILLS_SEED_VERSION = 1;
+function seedBills() {
+  var B = function (id, name, amount, category, rec, day, startMonth, notes, aliases, dueDate) {
+    return { id: id, name: name, amount: amount, category: category, recurrence: rec, dueDay: day, dueDate: dueDate || '', startMonth: startMonth, notes: notes, reminders: null, active: true, example: false, seeded: BILLS_SEED_VERSION, _aliases: aliases || [] };
+  };
+  return [
+    B('sd_flex1', 'Flex rent — 1st payment', 1714.98, 'Housing', 'monthly', 5, '2026-10', 'Flex 1st rent payment, due by the 5th: $1,698 rent + $5.99 Flex membership + $10.99 bill-payment fee. Flex then pays your full rent ($2,198 in Oct). Your lease ends Dec 4, so this can change if you renew or go month-to-month.', ['flex 1st payment', 'flex rent 1st payment', 'rent', 'apartment rent', 'marquis rent']),
+    B('sd_tyler', 'City of Tyler water & utilities', 114.71, 'Utilities', 'monthly', 2, '2026-11', 'AutoPay. Amount changes monthly. $114.71 was the latest month\u2019s charges. The bill due Nov 2 ($308.77, which included a declined earlier autopay) was paid Oct 10.', ['city of tyler', 'city of tyler water', 'water', 'water bill', 'tyler utilities', 'city of tyler utilities']),
+    B('sd_optimum', 'Optimum internet', 86, 'Utilities', 'monthly', 23, '2026-10', 'Monthly bill (amount from Experian\u2019s bill tracker).', ['optimum', 'internet']),
+    B('sd_bkmedia', 'bk-media.xyz (ES-3 service)', 10.49, 'Subscriptions', 'monthly', 23, '2026-10', 'Monthly invoice, paid with PayPal. The service gets suspended if the invoice goes unpaid.', ['bk-media', 'bk-media.xyz', 'bk media', 'es-3']),
+    B('sd_audible', 'Audible Premium Plus', 14.95, 'Subscriptions', 'monthly', 13, '2026-10', 'Auto-renews monthly: $14.95 plus tax.', ['audible']),
+    B('sd_gaiplus', 'Google AI Plus 2 TB (Google One)', 2.65, 'Subscriptions', 'monthly', 15, '2026-10', 'Google Play auto-renewal. The primary Visa keeps failing, so the backup card gets charged. Update the card in Google Play.', ['google one', 'google ai plus', 'google one 2 tb']),
+    B('sd_gone200', 'Google One 200 GB (2nd Google account)', 3.19, 'Subscriptions', 'monthly', 10, '2026-10', 'Google Play auto-renewal: $2.99 + tax. Started Oct 10.', ['google one 200 gb', 'google one 200gb']),
+    B('sd_capone', 'Capital One Quicksilver card payment', 25, 'Debt / Credit card', 'monthly', 19, '2026-10', 'Minimum payment from the last statement ($403.21 statement balance, $25 minimum, due Oct 19). Check the app for each month\u2019s amount. The card is over its limit, and the $100 payment on Oct 10 was returned.', ['capital one', 'quicksilver', 'capital one quicksilver', 'credit card']),
+    B('sd_amazon8', 'Amazon subscription', 8, 'Subscriptions', 'monthly', 15, '2026-11', 'Estimated by Experian from account activity ($8 on Oct 15). Delete this if it isn\u2019t a recurring charge.', ['amazon', 'amazon prime']),
+    B('sd_uthealth', 'UT Health East Texas (MyChart)', 1226.29, 'Medical', 'once', 15, '2026-11', 'Medical statement. Pay in MyChart, or ask about a payment plan.', ['ut health', 'ut health east texas', 'mychart'], '2026-11-15')
+  ];
+}
+// months already paid, per your email (added only together with the bill, never over your own marks)
+var SEED_PAID = {
+  'sd_flex1|2026-10': { paidOn: '2026-10-02', amount: 1714.98 },
+  'sd_tyler|2026-11': { paidOn: '2026-10-10', amount: 308.77 },
+  'sd_audible|2026-10': { paidOn: '2026-10-13', amount: 14.95 },
+  'sd_gaiplus|2026-10': { paidOn: '2026-10-15', amount: 2.65 },
+  'sd_gone200|2026-10': { paidOn: '2026-10-10', amount: 3.19 }
+};
+var SEED_PAID_EXISTING = { 'ex_flex|2026-10': { paidOn: '2026-10-15', amount: 515 } }; // Flex confirmed the 2nd October payment
+var nameKey = function (n) { return String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
+function mergeSeedBills(st) {
+  if (num(st.billsSeed) >= BILLS_SEED_VERSION) return 0;
+  if (!Array.isArray(st.bills)) st.bills = [];
+  if (!st.paid || typeof st.paid !== 'object') st.paid = {};
+  var have = {}, ids = {}, added = 0;
+  st.bills.forEach(function (b) { have[nameKey(b.name)] = true; ids[b.id] = true; });
+  seedBills().forEach(function (b) {
+    var keys = [b.name].concat(b._aliases).map(nameKey);
+    delete b._aliases;
+    if (ids[b.id] || keys.some(function (k) { return have[k]; })) return;
+    st.bills.push(b); have[nameKey(b.name)] = true; ids[b.id] = true; added++;
+    Object.keys(SEED_PAID).forEach(function (k) { if (k.indexOf(b.id + '|') === 0 && !st.paid[k]) st.paid[k] = clone(SEED_PAID[k]); });
+  });
+  // mark Oct Flex 2nd payment paid only if the original example bill is still there untouched in amount
+  Object.keys(SEED_PAID_EXISTING).forEach(function (k) {
+    var id = k.split('|')[0], b = st.bills.find(function (x) { return x.id === id; });
+    if (b && num(b.amount) === SEED_PAID_EXISTING[k].amount && !st.paid[k]) st.paid[k] = clone(SEED_PAID_EXISTING[k]);
+  });
+  st.billsSeed = BILLS_SEED_VERSION;
+  st.billsSeedAdded = added;
+  return added;
+}
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; mergeSeedBills(st); return st; }
+
 function fill(base, over) {
   if (over == null) return base;
   if (Array.isArray(base) || typeof base !== 'object' || base === null) return over;
@@ -212,7 +265,7 @@ function load() {
     var raw = localStorage.getItem(KEY);
     if (raw) return normalize(JSON.parse(raw));
   } catch (e) { /* ignore */ }
-  return exampleState();
+  return freshState();
 }
 function normalize(s) {
   var d = exampleState();
@@ -228,6 +281,7 @@ function normalize(s) {
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
   if (!st.bonus || typeof st.bonus !== 'object' || !Array.isArray(st.bonus.tiers) || st.bonus.tiers.length !== 3) st.bonus = bonusDefaults();
   if (st.bonus.mode !== 'marginal') st.bonus.mode = 'all';
+  mergeSeedBills(st);
   return st;
 }
 
@@ -1052,8 +1106,8 @@ document.addEventListener('click', function (ev) {
     case 'del-rem': state.settings.reminders.splice(+el.getAttribute('data-i'), 1); save(); render(); break;
     case 'export': exportJson(); break;
     case 'import': $('#importFile').click(); break;
-    case 'reset-example': if (confirm('Replace everything with the example data?')) { state = exampleState(); save(); render(); toast('Example data restored'); } break;
-    case 'wipe': if (confirm('Delete ALL data? This cannot be undone (export a backup first).')) { var e0 = exampleState(); state = fill(e0, { bills: [], income: { g: { entries: [] } }, paid: {}, actuals: {} }); state.bills = []; state.income.g.entries = []; state.income.w.example = false; save(); render(); toast('All data deleted'); } break;
+    case 'reset-example': if (confirm('Replace everything with the example data?')) { state = freshState(); save(); render(); toast('Example data restored'); } break;
+    case 'wipe': if (confirm('Delete ALL data? This cannot be undone (export a backup first).')) { var e0 = exampleState(); state = fill(e0, { bills: [], income: { g: { entries: [] } }, paid: {}, actuals: {} }); state.bills = []; state.income.g.entries = []; state.income.w.example = false; state.billsSeed = BILLS_SEED_VERSION; save(); render(); toast('All data deleted'); } break;
   }
 });
 document.addEventListener('change', function (ev) {
@@ -1131,9 +1185,10 @@ if (TABS.some(function (t) { return t[0] === hashTab; })) ui.tab = hashTab;
 if (/^(g|w)$/.test((location.hash.split('/')[1] || ''))) ui.inc = location.hash.split('/')[1];
 render();
 refreshIcs();
+if (num(state.billsSeedAdded) > 0) { var _n = state.billsSeedAdded; state.billsSeedAdded = 0; save(true); toast('Added ' + _n + ' bills from your email & calendar'); }
 setInterval(checkNotifications, 60000);
 setTimeout(checkNotifications, 2000);
-window.__moneyplan = { combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+window.__moneyplan = { seedBills: seedBills, mergeSeedBills: mergeSeedBills, combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
 })();
 
 </script>
