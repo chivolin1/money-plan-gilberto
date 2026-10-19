@@ -110,6 +110,8 @@ ol.steps{padding-left:22px;margin:6px 0}ol.steps li{margin:6px 0}
 }
 .alert a,.card a{color:inherit;font-weight:700;text-decoration:underline}
 
+.stat.click{cursor:pointer}.stat.click:active{opacity:.85}.tapnote{float:right;text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent,#0f766e)}.chev{font-size:1.4rem;color:var(--muted);font-weight:600}.inctotal{border-top:2px solid var(--line);margin-top:10px;padding:12px 4px;font-size:1.1rem}
+
 </style>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f766e"><link rel="icon" href="icon-192.png"><script>if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"))</script></head>
 <body>
@@ -786,7 +788,7 @@ function vDashboard() {
   if (ds.length) h += '<div class="alert info">🔔<div><b>Reminders active:</b> ' + ds.slice(0, 5).map(function (o) { var d = diffDays(o.date, today()); return esc(o.bill.name) + ' ' + money(o.amount) + ' (' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'in ' + d + ' days') + ')'; }).join(' · ') + '</div></div>';
 
   h += '<div class="grid g3">' +
-    '<div class="card stat"><div class="lbl">Income</div><div class="big">' + money(S.inc.best) + '</div><div class="sub">Estimated ' + money(S.inc.est) + '<br>Actual deposits entered ' + money(S.inc.actual) + '</div></div>' +
+    '<div class="card stat click" data-action="inc-detail" role="button" tabindex="0" aria-label="Income details"><div class="lbl">Income <span class="tapnote">Tap for details ›</span></div><div class="big">' + money(S.inc.best) + ' <span class="chev">›</span></div><div class="sub">Estimated ' + money(S.inc.est) + '<br>Actual deposits entered ' + money(S.inc.actual) + '</div></div>' +
     '<div class="card stat"><div class="lbl">Fixed payments</div><div class="big">' + money(S.billsTotal) + '</div><div class="sub">Paid ' + money(S.paidTotal) + '<br>Still to pay ' + money(S.unpaid) + '</div></div>' +
     '<div class="card stat"><div class="lbl">Remaining</div><div class="big ' + (S.remaining < 0 ? 'neg' : 'pos') + '">' + money(S.remaining) + '</div><div class="sub">Income − payments<br>(vs. estimates only: ' + money(S.remainingEst) + ')</div></div></div>';
 
@@ -964,13 +966,58 @@ function vSettings() {
     '<div class="card"><h3>About</h3><p class="small muted">Money Plan v1 · works offline · no accounts, no tracking, no external requests. Seeded “example” items are editable and can be deleted.</p></div>';
 }
 
+
+function incomeBreakdown(mk) {
+  var inc = incomeMonth(mk), groups = { salary: [], bonus: [], mexico: [], wife: [], other: [] };
+  var se = salEntry();
+  inc.items.forEach(function (i) {
+    var amt = i.actual != null ? i.actual : i.est, e = i.entry, k;
+    if (i.who === 'w') k = 'wife';
+    else if (e.id === 'sd_mexico') k = 'mexico';
+    else if (se && e.id === se.id) k = 'salary';
+    else if (e.kind !== 'deposit' && num(e.bonus) > 0 && num(e.salary) === 0) k = 'bonus';
+    else k = 'other';
+    groups[k].push({ date: i.date, label: i.label, amount: round2(amt), gross: i.calc.deposit ? null : i.calc.gross, est: i.est, actual: i.actual, deposit: !!i.calc.deposit, calc: i.calc });
+  });
+  var total = 0; inc.items.forEach(function (i) { total += (i.actual != null ? i.actual : i.est); });
+  var sums = {}; Object.keys(groups).forEach(function (k) { sums[k] = round2(groups[k].reduce(function (a, r) { return a + r.amount; }, 0)); });
+  return { groups: groups, sums: sums, total: total, dashboard: inc.best, wifeOn: !!state.income.w.enabled };
+}
+function incomeDetailModal(mk) {
+  var B = incomeBreakdown(mk), b = state.bonus || {};
+  function rows(list, note) {
+    return list.map(function (r) {
+      var sub = dayLabel(r.date) + (r.deposit ? ' · take-home deposit (no taxes)' : ' · gross ' + money(r.gross) + ' → take-home') + (r.actual != null && !r.deposit ? ' · actual entered' : '') + (note ? ' · ' + note : '');
+      return '<div class="item"><div class="main"><div class="t">' + esc(r.label) + '</div><div class="s">' + sub + '</div></div><div class="amt">' + money(r.amount) + '</div></div>';
+    }).join('');
+  }
+  function sec(title, k, emptyMsg, note) {
+    return '<div class="incsec"><div class="row between"><h3 style="margin:10px 0 2px">' + title + '</h3><b>' + money(B.sums[k]) + '</b></div>' + (B.groups[k].length ? rows(B.groups[k], note) : '<div class="small muted" style="padding:6px 4px">' + emptyMsg + '</div>') + '</div>';
+  }
+  var bnote = '';
+  if (num(b.sales) > 0) { try { var bc = bonusCalc(); bnote = 'Bonus tab: ' + money(num(b.sales)) + ' sales · ' + pct(bc.effRate) + ' (' + money(bc.gross) + ' gross)' + (num(b.life) > 0 ? ' · incl. life add-on' : ' · no life policy'); } catch (x) { bnote = ''; } }
+  openModal({
+    title: 'Income · ' + monthName(mk), draft: {}, focus: false, saveLabel: 'Close', noCancel: true,
+    body: function () {
+      return '<p class="small muted" style="margin:6px 0 0">Take-home income by source. Gross is before taxes; amounts on the right are what lands in the bank.</p>' +
+        sec('Salary', 'salary', 'No salary paychecks this month.') +
+        sec('Bonus', 'bonus', 'No bonus this month.', bnote) +
+        sec('Money from Mexico', 'mexico', 'Not this month.') +
+        sec('Wife’s income', 'wife', B.wifeOn ? 'No paydays this month.' : '$0 — turned off (switch it on in Income → Wife).') +
+        (B.groups.other.length ? sec('Other', 'other', '') : '') +
+        '<div class="row between inctotal"><b>Total take-home</b><b>' + money(B.total) + '</b></div>';
+    },
+    onSave: function () { return true; }
+  });
+}
+
 /* ---------- Modals ---------- */
 var modalCfg = null;
 function openModal(cfg) { modalCfg = cfg; drawModal(); var m = $('#modal'); m.hidden = false; var f = $('input:not([type=hidden]),select', m); if (f && cfg.focus !== false && window.innerWidth > 700) f.focus(); }
 function drawModal() {
   var c = modalCfg;
   $('#modal').innerHTML = '<form class="modal" novalidate autocomplete="off"><div class="row between"><h2 style="margin:0">' + c.title + '</h2><button type="button" class="sm ghost" data-maction="close" aria-label="Close">✕</button></div>' +
-    c.body(c.draft) + '<div class="err" id="merr"></div><div class="actions"><button class="pri" type="submit">' + (c.saveLabel || 'Save') + '</button><button type="button" data-maction="close">Cancel</button>' + (c.onDelete ? '<button type="button" class="danger" data-maction="delete">Delete</button>' : '') + '</div></form>';
+    c.body(c.draft) + '<div class="err" id="merr"></div><div class="actions"><button class="pri" type="submit">' + (c.saveLabel || 'Save') + '</button>' + (c.noCancel ? '' : '<button type="button" data-maction="close">Cancel</button>') + (c.onDelete ? '<button type="button" class="danger" data-maction="delete">Delete</button>' : '') + '</div></form>';
   if (c.after) c.after(c.draft);
 }
 function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; modalCfg = null; }
@@ -1106,6 +1153,7 @@ document.addEventListener('click', function (ev) {
     case 'month-now': ui.month = thisMonth(); render(); break;
     case 'inc-tab': ui.inc = el.getAttribute('data-t'); render(); break;
     case 'bonus-use': bonusModal(); break;
+    case 'inc-detail': incomeDetailModal(ui.month); break;
     case 'bonus-reset': if (confirm('Reset tiers, mode and life add-on to the defaults?')) { var bd = bonusDefaults(); bd.sales = state.bonus.sales; bd.life = state.bonus.life; state.bonus = bd; ui.bonusRules = true; save(); render(); } break;
     case 'add-bill': billModal(null); break;
     case 'edit-bill': billModal(id); break;
@@ -1202,7 +1250,7 @@ refreshIcs();
 if (num(state.billsSeedAdded) > 0) { var _n = state.billsSeedAdded; state.billsSeedAdded = 0; save(true); toast('Added ' + _n + ' bills from your email & calendar'); }
 setInterval(checkNotifications, 60000);
 setTimeout(checkNotifications, 2000);
-window.__moneyplan = { seedBills: seedBills, mergeSeedBills: mergeSeedBills, combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+window.__moneyplan = { seedBills: seedBills, mergeSeedBills: mergeSeedBills, combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, incomeBreakdown: incomeBreakdown, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
 })();
 
 </script>
