@@ -257,7 +257,7 @@ function mergeSeedBills(st) {
   st.billsSeedAdded = added;
   return added;
 }
-function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; st.migr7 = true; st.migr8 = true; st.migr9 = true; st.migr10 = true; mergeSeedBills(st); return st; }
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; st.migr7 = true; st.migr8 = true; st.migr9 = true; st.migr10 = true; st.migr11 = true; [{ id: 'sd_food', name: 'Food (estimate)', amount: 800, category: 'Food', recurrence: 'monthly', dueDay: 1, dueDate: '', startMonth: '2026-10', notes: 'Fixed monthly estimate for groceries & eating out. No reminders.', reminders: null, active: true, example: false, noRemind: true }, { id: 'sd_apps', name: 'Apps (estimate)', amount: 300, category: 'Subscriptions', recurrence: 'monthly', dueDay: 1, dueDate: '', startMonth: '2026-10', notes: 'Fixed monthly estimate for apps & subscriptions. No reminders.', reminders: null, active: true, example: false, noRemind: true }].forEach(function (b) { st.bills.push(b); }); mergeSeedBills(st); return st; }
 
 function fill(base, over) {
   if (over == null) return base;
@@ -307,6 +307,9 @@ function normalize(s) {
   // v10: $4,052 was the whole Oct 5 paycheck incl. $1,100 salary, so the bonus take-home is $2,952
   if (!(s && s.migr10)) st.income.g.entries.forEach(function (e) { if (e.id === 'sd_bonus_2026_09' && e.kind === 'deposit' && num(e.amount) === 4052) e.amount = 2952; });
   st.migr10 = true;
+  // v11: fixed monthly Food $800 and Apps $300 estimates (no reminders), added once
+  if (!(s && s.migr11)) [{ id: 'sd_food', name: 'Food (estimate)', amount: 800, category: 'Food', recurrence: 'monthly', dueDay: 1, dueDate: '', startMonth: '2026-10', notes: 'Fixed monthly estimate for groceries & eating out. No reminders.', reminders: null, active: true, example: false, noRemind: true }, { id: 'sd_apps', name: 'Apps (estimate)', amount: 300, category: 'Subscriptions', recurrence: 'monthly', dueDay: 1, dueDate: '', startMonth: '2026-10', notes: 'Fixed monthly estimate for apps & subscriptions. No reminders.', reminders: null, active: true, example: false, noRemind: true }].forEach(function (b) { if (!st.bills.some(function (x) { return x.id === b.id; })) st.bills.push(b); });
+  st.migr11 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
@@ -358,14 +361,14 @@ function billsInMonth(mk) {
 function overdueList() {
   var t = today(), out = [], cm = thisMonth();
   for (var i = -5; i <= 0; i++) {
-    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && o.date < t) out.push(o); });
+    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && !o.bill.noRemind && o.date < t) out.push(o); });
   }
   return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
 }
 function upcomingList(days) {
   var t = today(), end = addDays(t, days), out = [], cm = thisMonth();
   for (var i = 0; i <= 3; i++) {
-    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && o.date >= t && o.date <= end) out.push(o); });
+    billsInMonth(addMonths(cm, i)).forEach(function (o) { if (!o.paid && !o.bill.noRemind && o.date >= t && o.date <= end) out.push(o); });
   }
   return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
 }
@@ -672,6 +675,7 @@ function buildIcs() {
   var months = Math.max(1, Math.min(36, num(state.settings.icsMonths) || 12)), cm = thisMonth();
   for (var i = 0; i < months; i++) {
     billsInMonth(addMonths(cm, i)).forEach(function (o) {
+      if (o.bill.noRemind) return;
       var b = o.bill, d8 = o.date.replace(/-/g, ''), nx = addDays(o.date, 1).replace(/-/g, '');
       var rems = billReminders(b);
       var title = (o.paid ? '✓ PAID: ' : '💵 ') + b.name + ' — ' + money(o.amount) + (o.paid ? '' : ' due');
@@ -1150,7 +1154,7 @@ function billModal(id) {
     onSave: function (d) {
       if (!String(d.name).trim()) return 'Please enter a name.';
       if (!(num(d.amount) >= 0) || d.amount === '') return 'Please enter an amount.';
-      var rec = { id: d.id || uid(), name: String(d.name).trim(), amount: round2(num(d.amount)), category: d.category, recurrence: d.recurrence, dueDay: Math.min(31, Math.max(1, Math.round(num(d.dueDay) || 1))), dueDate: d.recurrence === 'once' ? d.dueDate : '', startMonth: d.startMonth, notes: String(d.notes || '').trim(), reminders: d.remMode === 'custom' ? d.reminders.map(function (r) { return { days: Math.max(0, Math.round(num(r.days))), time: r.time || '09:00' }; }) : null, active: d.active !== false, example: false };
+      var rec = { id: d.id || uid(), name: String(d.name).trim(), amount: round2(num(d.amount)), category: d.category, recurrence: d.recurrence, dueDay: Math.min(31, Math.max(1, Math.round(num(d.dueDay) || 1))), dueDate: d.recurrence === 'once' ? d.dueDate : '', startMonth: d.startMonth, notes: String(d.notes || '').trim(), reminders: d.remMode === 'custom' ? d.reminders.map(function (r) { return { days: Math.max(0, Math.round(num(r.days))), time: r.time || '09:00' }; }) : null, active: d.active !== false, example: false }; if (d.noRemind) rec.noRemind = true;
       if (rec.recurrence === 'once' && !rec.dueDate) return 'Please pick a due date.';
       if (d.id) { var i = state.bills.findIndex(function (b) { return b.id === d.id; }); state.bills[i] = rec; } else state.bills.push(rec);
       save(); render(); toast('Payment saved'); return true;
