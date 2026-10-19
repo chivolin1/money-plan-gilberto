@@ -157,7 +157,7 @@ var ordinal = function (n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; retu
 /* ---------- default / example data ---------- */
 function bonusDefaults() {
   return {
-    sales: 0, life: 0, mode: 'all',
+    sales: 46056, life: 0, mode: 'all',
     tiers: [{ from: 30000, rate: 5 }, { from: 40000, rate: 7 }, { from: 50000, rate: 9 }],
     lifeAdd: 2, lifeOnce: true, maxRate: 9, assumed: true
   };
@@ -185,7 +185,7 @@ function exampleState() {
         children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: true,
         entries: [
           { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true },
-          { id: 'ex_pay', kind: 'paycheck', label: 'Bonus received (example, edit)', date: '2026-10-05', salary: 0, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true },
+          { id: 'sd_bonus_2026_10', kind: 'paycheck', label: 'October 2026 sales bonus ($46,056 sales, 7%) — on Nov 5 paycheck', date: '2026-11-05', salary: 0, bonus: 3223.92, otherDed: 0, amount: 0, repeat: 'none', example: false },
           { id: 'sd_mexico', kind: 'deposit', label: 'Money from Mexico (take-home, 1st of month)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 3400, repeat: 'monthly', example: false }
         ]
       },
@@ -249,7 +249,7 @@ function mergeSeedBills(st) {
   st.billsSeedAdded = added;
   return added;
 }
-function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; mergeSeedBills(st); return st; }
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; st.migr6 = true; st.migr7 = true; mergeSeedBills(st); return st; }
 
 function fill(base, over) {
   if (over == null) return base;
@@ -283,6 +283,13 @@ function normalize(s) {
   // v6: wife currently has no income; switch her pay off once (she can turn it back on)
   if (!(s && s.migr6)) st.income.w.enabled = false;
   st.migr6 = true;
+  // v7: real Oct 2026 bonus replaces the $4,100 example (example removed only if untouched); Bonus tab set to Oct sales
+  if (!(s && s.migr7)) {
+    st.income.g.entries = st.income.g.entries.filter(function (e) { return !(e.id === 'ex_pay' && e.example && num(e.bonus) === 4100 && num(e.salary) === 0 && e.date === '2026-10-05'); });
+    if (!st.income.g.entries.some(function (e) { return e.id === 'sd_bonus_2026_10'; })) st.income.g.entries.push({ id: 'sd_bonus_2026_10', kind: 'paycheck', label: 'October 2026 sales bonus ($46,056 sales, 7%) — on Nov 5 paycheck', date: '2026-11-05', salary: 0, bonus: 3223.92, otherDed: 0, amount: 0, repeat: 'none', example: false });
+    if (st.bonus && typeof st.bonus === 'object') { st.bonus.sales = 46056; st.bonus.life = 0; }
+  }
+  st.migr7 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
