@@ -185,7 +185,8 @@ function exampleState() {
         children: 2, w4Step3: false, creditPerChild: 2200, payPeriods: 24, salaryNet: true,
         entries: [
           { id: 'ex_sal', kind: 'paycheck', label: 'Salary paycheck — 5th & 20th (example, edit)', date: '2026-10-05', day2: 20, salary: 1100, bonus: 0, otherDed: 0, amount: 0, repeat: 'semimonthly', example: true },
-          { id: 'ex_pay', kind: 'paycheck', label: 'Bonus received (example, edit)', date: '2026-10-05', salary: 0, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true }
+          { id: 'ex_pay', kind: 'paycheck', label: 'Bonus received (example, edit)', date: '2026-10-05', salary: 0, bonus: 4100, otherDed: 0, amount: 0, repeat: 'none', example: true },
+          { id: 'sd_mexico', kind: 'deposit', label: 'Money from Mexico (take-home, 1st of month)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 3400, repeat: 'monthly', example: false }
         ]
       },
       w: {
@@ -248,7 +249,7 @@ function mergeSeedBills(st) {
   st.billsSeedAdded = added;
   return added;
 }
-function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; mergeSeedBills(st); return st; }
+function freshState() { var st = exampleState(); st.migr3 = true; st.migr4 = true; st.migr5 = true; mergeSeedBills(st); return st; }
 
 function fill(base, over) {
   if (over == null) return base;
@@ -276,6 +277,9 @@ function normalize(s) {
   // v4: the $1,100 salary is TAKE-HOME. Flip the toggle for existing users unless they changed it by hand (salaryNetTouched).
   if (needMig4 && !st.income.g.salaryNetTouched) st.income.g.salaryNet = true;
   st.migr4 = true;
+  // v5: add the monthly Mexico deposit once (not re-added if the user deletes it)
+  if (!(s && s.migr5)) { if (!Array.isArray(st.income.g.entries)) st.income.g.entries = []; if (!st.income.g.entries.some(function (e) { return e.id === 'sd_mexico'; })) st.income.g.entries.push({ id: 'sd_mexico', kind: 'deposit', label: 'Money from Mexico (take-home, 1st of month)', date: '2026-10-01', salary: 0, bonus: 0, otherDed: 0, amount: 3400, repeat: 'monthly', example: false }); }
+  st.migr5 = true;
   ['bills'].forEach(function (k) { if (!Array.isArray(st[k])) st[k] = d[k]; });
   if (!Array.isArray(st.income.g.entries)) st.income.g.entries = [];
   if (!Array.isArray(st.settings.reminders)) st.settings.reminders = d.settings.reminders;
