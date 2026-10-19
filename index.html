@@ -111,6 +111,11 @@ ol.steps{padding-left:22px;margin:6px 0}ol.steps li{margin:6px 0}
 .alert a,.card a{color:inherit;font-weight:700;text-decoration:underline}
 
 .stat.click{cursor:pointer}.stat.click:active{opacity:.85}.tapnote{float:right;text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent,#0f766e)}.chev{font-size:1.4rem;color:var(--muted);font-weight:600}.inctotal{border-top:2px solid var(--line);margin-top:10px;padding:12px 4px;font-size:1.1rem}
+.seg{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px}.seg button{white-space:nowrap;border-radius:999px;padding:8px 12px;font-size:.85rem}.seg button.on{background:#0f766e;color:#fff;border-color:#0f766e}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.grid3 .stat{padding:10px}.grid3 .big{font-size:1.05rem}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:.8rem;margin-top:6px}.legend i,.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.donutwrap{display:flex;gap:14px;align-items:center}.donut{width:130px;flex:none}.dlist{flex:1;min-width:0}.dlist .row{padding:4px 0}.donut .dl{font-size:11px;fill:var(--muted)}.donut .dv{font-size:16px;font-weight:800;fill:currentColor}
+.seg{scrollbar-width:none}.seg::-webkit-scrollbar{display:none}
 
 </style>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f766e"><link rel="icon" href="icon-192.png"><script>if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"))</script></head>
@@ -718,7 +723,7 @@ function setPath(obj, path, val) {
   for (var i = 0; i < p.length - 1; i++) { o = o[p[i]]; if (o == null) return; }
   o[p[p.length - 1]] = val;
 }
-var TABS = [['dashboard', '📊', 'Dashboard'], ['payments', '🧾', 'Payments'], ['income', '💵', 'Income'], ['bonus', '🎯', 'Bonus'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
+var TABS = [['dashboard', '📊', 'Dashboard'], ['payments', '🧾', 'Payments'], ['income', '💵', 'Income'], ['bonus', '🎯', 'Bonus'], ['history', '📈', 'History'], ['reminders', '🔔', 'Reminders'], ['settings', '⚙️', 'Settings']];
 function renderTabs() {
   $('#tabs').innerHTML = TABS.map(function (t) {
     return '<button data-action="tab" data-tab="' + t[0] + '" class="' + (ui.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"><span class="ico">' + t[1] + '</span><span>' + t[2] + '</span></button>';
@@ -726,7 +731,7 @@ function renderTabs() {
 }
 function render() {
   renderTabs();
-  var fn = { dashboard: vDashboard, payments: vPayments, income: vIncome, bonus: vBonus, reminders: vReminders, settings: vSettings }[ui.tab];
+  var fn = { dashboard: vDashboard, payments: vPayments, income: vIncome, bonus: vBonus, history: vHistory, reminders: vReminders, settings: vSettings }[ui.tab];
   $('#view').innerHTML = fn();
   if (icsInfo.url) document.querySelectorAll('[data-ics-link]').forEach(function (a) { a.href = icsInfo.url; });
   document.querySelectorAll('[data-ics-count]').forEach(function (el) { if (icsInfo.at) el.textContent = icsInfo.count + ' events · updated ' + icsInfo.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); });
@@ -1011,6 +1016,84 @@ function incomeDetailModal(mk) {
   });
 }
 
+
+/* ---------- History ---------- */
+var SRC = [['salary', 'Salary', '#0f766e'], ['bonus', 'Bonus', '#7c3aed'], ['mexico', 'Mexico', '#2563eb'], ['wife', 'Wife', '#db2777'], ['other', 'Other', '#64748b']];
+var SPEND_C = '#ea580c';
+function dataStartMonth() {
+  var ms = [];
+  state.income.g.entries.forEach(function (e) { if (e.date) ms.push(e.date.slice(0, 7)); });
+  state.bills.forEach(function (b) { if (b.startMonth) ms.push(b.startMonth); else if (b.dueDate) ms.push(b.dueDate.slice(0, 7)); });
+  if (state.income.w.enabled && state.income.w.anchor) ms.push(state.income.w.anchor.slice(0, 7));
+  ms.sort(); return ms[0] || null;
+}
+function histMonths(r) {
+  var cm = thisMonth(), out = [], i;
+  if (r === '1m') out = [cm];
+  else if (r === '1y') for (i = -11; i <= 0; i++) out.push(addMonths(cm, i));
+  else if (r === 'ytd') { var m = cm.slice(0, 4) + '-01'; while (m <= cm) { out.push(m); m = addMonths(m, 1); } }
+  else if (r === 'next6') for (i = 1; i <= 6; i++) out.push(addMonths(cm, i));
+  else for (i = -5; i <= 0; i++) out.push(addMonths(cm, i));
+  return out;
+}
+function historyData(r) {
+  var start = dataStartMonth(), months = histMonths(r).map(function (mk) {
+    var has = !!start && mk >= start;
+    if (!has) return { mk: mk, has: false };
+    var B = incomeBreakdown(mk), S = summary(mk);
+    return { mk: mk, has: true, sums: B.sums, income: B.total, spend: S.billsTotal, left: B.total - S.billsTotal };
+  });
+  var tot = { income: 0, spend: 0, src: {} }; SRC.forEach(function (x) { tot.src[x[0]] = 0; });
+  months.forEach(function (m) { if (!m.has) return; tot.income += m.income; tot.spend += m.spend; SRC.forEach(function (x) { tot.src[x[0]] += m.sums[x[0]] || 0; }); });
+  tot.left = tot.income - tot.spend; tot.n = months.filter(function (m) { return m.has; }).length;
+  return { months: months, tot: tot, start: start };
+}
+function histChart(D) {
+  var ms = D.months, n = ms.length, W = 360, H = 230, padT = 16, padB = 28, ch = H - padT - padB;
+  var max = 1; ms.forEach(function (m) { if (m.has) max = Math.max(max, m.income, m.spend); });
+  var gw = (W - 8) / n, bw = Math.min(26, gw * 0.36);
+  var o = '<svg class="chart hist" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Income and spending by month">';
+  for (var g = 0; g <= 4; g++) { var gy = padT + ch * g / 4; o += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="currentColor" opacity="' + (g === 4 ? .3 : .08) + '"/>'; }
+  o += '<text class="val" x="2" y="' + (padT - 4) + '">' + short$(max) + '</text>';
+  ms.forEach(function (m, i) {
+    var cx = 4 + gw * i + gw / 2, base = padT + ch;
+    o += '<g class="hbar" data-action="' + (m.has ? 'inc-detail' : '') + '" data-m="' + m.mk + '" style="cursor:' + (m.has ? 'pointer' : 'default') + '"><rect x="' + (cx - gw / 2) + '" y="0" width="' + gw + '" height="' + H + '" fill="transparent"/>';
+    if (!m.has) o += '<rect x="' + (cx - bw - 1) + '" y="' + (base - 18) + '" width="' + (bw * 2 + 2) + '" height="18" rx="4" fill="currentColor" opacity=".07"/><text class="val" x="' + cx + '" y="' + (base - 24) + '" text-anchor="middle" opacity=".6">' + (n <= 6 ? 'no data' : '–') + '</text>';
+    else {
+      var y = base;
+      SRC.forEach(function (x) { var v = m.sums[x[0]] || 0; if (v <= 0) return; var h = v / max * ch; y -= h; o += '<rect x="' + (cx - bw - 1) + '" y="' + y + '" width="' + bw + '" height="' + h + '" fill="' + x[2] + '"/>'; });
+      var sh = m.spend / max * ch;
+      o += '<rect x="' + (cx + 1) + '" y="' + (base - sh) + '" width="' + bw + '" height="' + sh + '" rx="3" fill="' + SPEND_C + '"/>';
+      if (n <= 6) o += '<text class="val" x="' + (cx - bw / 2 - 1) + '" y="' + (y - 4) + '" text-anchor="middle">' + short$(m.income) + '</text><text class="val" x="' + (cx + bw / 2 + 1) + '" y="' + (base - sh - 4) + '" text-anchor="middle">' + short$(m.spend) + '</text>';
+    }
+    o += '<text x="' + cx + '" y="' + (H - 9) + '" text-anchor="middle">' + esc(n > 6 ? monthShort(m.mk).slice(0, 1) : monthShort(m.mk)) + '</text></g>';
+  });
+  return o + '</svg>';
+}
+function donut(src, total) {
+  var R = 54, C = 2 * Math.PI * R, off = 0, o = '<svg class="donut" viewBox="0 0 140 140" role="img" aria-label="Income by source"><circle cx="70" cy="70" r="' + R + '" fill="none" stroke="currentColor" stroke-opacity=".08" stroke-width="22"/>';
+  if (total > 0) SRC.forEach(function (x) { var v = src[x[0]] || 0; if (v <= 0) return; var len = v / total * C; o += '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + x[2] + '" stroke-width="22" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 70 70)"/>'; off += len; });
+  return o + '<text x="70" y="66" text-anchor="middle" class="dl">Income</text><text x="70" y="84" text-anchor="middle" class="dv">' + short$(total) + '</text></svg>';
+}
+function vHistory() {
+  var r = ui.hist || '6m', D = historyData(r), T = D.tot;
+  var opts = [['1m', 'Last month'], ['6m', '6 months'], ['1y', '1 year'], ['ytd', 'YTD'], ['next6', 'Next 6 (projected)']];
+  var h = '<div class="seg">' + opts.map(function (x) { return '<button class="' + (r === x[0] ? 'on' : '') + '" data-action="hist-range" data-r="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  var label = r === 'next6' ? 'Projected ' + monthName(D.months[0].mk) + ' – ' + monthName(D.months[D.months.length - 1].mk) : monthName(D.months[0].mk) + (D.months.length > 1 ? ' – ' + monthName(D.months[D.months.length - 1].mk) : '');
+  h += '<div class="grid3">' +
+    '<div class="card stat"><div class="lbl">Income</div><div class="big" style="color:#0f766e">' + money(T.income) + '</div><div class="sub">take-home</div></div>' +
+    '<div class="card stat"><div class="lbl">Spending</div><div class="big" style="color:' + SPEND_C + '">' + money(T.spend) + '</div><div class="sub">bills paid/due</div></div>' +
+    '<div class="card stat"><div class="lbl">Left over</div><div class="big" style="color:' + (T.left < 0 ? '#dc2626' : '#16a34a') + '">' + money(T.left) + '</div><div class="sub">' + T.n + ' month' + (T.n === 1 ? '' : 's') + ' with data</div></div></div>';
+  h += '<div class="card"><h3 style="margin-top:0">' + esc(label) + '</h3>' + histChart(D) +
+    '<div class="legend">' + SRC.map(function (x) { return '<span><i style="background:' + x[2] + '"></i>' + x[1] + '</span>'; }).join('') + '<span><i style="background:' + SPEND_C + '"></i>Spending</span></div>' +
+    '<p class="small muted" style="margin:6px 0 0">Left bar = take-home income by source · right bar = bills. Tap a month for its income breakdown.</p></div>';
+  h += '<div class="card"><h3 style="margin-top:0">Income by source</h3><div class="donutwrap">' + donut(T.src, T.income) + '<div class="dlist">' + SRC.map(function (x) {
+    var v = T.src[x[0]] || 0; return '<div class="row between"><span><i class="dot" style="background:' + x[2] + '"></i>' + x[1] + '</span><b>' + money(v) + (T.income > 0 ? ' <span class="muted small">' + Math.round(v / T.income * 100) + '%</span>' : '') + '</b></div>';
+  }).join('') + '</div></div></div>';
+  h += '<p class="small muted">' + (r === 'next6' ? 'Projected from your recurring entries and bills — not real history.' : 'History starts ' + (D.start ? monthName(D.start) : '—') + ', when your entries begin. Months before that show “no data”. Add past paychecks (Income → Add entry) and bills with an earlier start month to fill in history.') + '</p>';
+  return h;
+}
+
 /* ---------- Modals ---------- */
 var modalCfg = null;
 function openModal(cfg) { modalCfg = cfg; drawModal(); var m = $('#modal'); m.hidden = false; var f = $('input:not([type=hidden]),select', m); if (f && cfg.focus !== false && window.innerWidth > 700) f.focus(); }
@@ -1153,7 +1236,8 @@ document.addEventListener('click', function (ev) {
     case 'month-now': ui.month = thisMonth(); render(); break;
     case 'inc-tab': ui.inc = el.getAttribute('data-t'); render(); break;
     case 'bonus-use': bonusModal(); break;
-    case 'inc-detail': incomeDetailModal(ui.month); break;
+    case 'inc-detail': incomeDetailModal(el.getAttribute('data-m') || ui.month); break;
+    case 'hist-range': ui.hist = el.getAttribute('data-r'); render(); break;
     case 'bonus-reset': if (confirm('Reset tiers, mode and life add-on to the defaults?')) { var bd = bonusDefaults(); bd.sales = state.bonus.sales; bd.life = state.bonus.life; state.bonus = bd; ui.bonusRules = true; save(); render(); } break;
     case 'add-bill': billModal(null); break;
     case 'edit-bill': billModal(id); break;
@@ -1250,7 +1334,7 @@ refreshIcs();
 if (num(state.billsSeedAdded) > 0) { var _n = state.billsSeedAdded; state.billsSeedAdded = 0; save(true); toast('Added ' + _n + ' bills from your email & calendar'); }
 setInterval(checkNotifications, 60000);
 setTimeout(checkNotifications, 2000);
-window.__moneyplan = { seedBills: seedBills, mergeSeedBills: mergeSeedBills, combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, incomeBreakdown: incomeBreakdown, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
+window.__moneyplan = { seedBills: seedBills, mergeSeedBills: mergeSeedBills, combinedOut: combinedOut, salEntry: salEntry, gOccurrences: gOccurrences, incomeMonth: incomeMonth, incomeBreakdown: incomeBreakdown, historyData: historyData, state: function () { return state; }, buildIcs: buildIcs, bonusCalc: bonusCalc, bonusRate: bonusRate, wCalc: wCalc, gCalc: gCalc, summary: summary, wPaydays: wPaydays, ui: ui, render: render };
 })();
 
 </script>
